@@ -3,13 +3,21 @@ import pg8000.native
 from datetime import datetime
 from urllib.parse import urlparse
 
-DATABASE_URL = os.environ.get('DATABASE_URL', '')
-
 def get_connection():
-    url = DATABASE_URL
+    url = os.environ.get('DATABASE_URL', '')
+    
+    if not url:
+        raise Exception("DATABASE_URL environment variable is not set. "
+                       "Add PostgreSQL to your Railway project.")
+    
+    # Railway sometimes uses postgres:// — pg8000 needs postgresql://
     if url.startswith('postgres://'):
         url = url.replace('postgres://', 'postgresql://', 1)
+    
     parsed = urlparse(url)
+    
+    print(f"Connecting to database at {parsed.hostname}...")
+    
     conn = pg8000.native.Connection(
         host=parsed.hostname,
         port=parsed.port or 5432,
@@ -22,6 +30,7 @@ def get_connection():
 
 def setup_db():
     conn = get_connection()
+    
     conn.run('''
         CREATE TABLE IF NOT EXISTS snapshots (
             id SERIAL PRIMARY KEY,
@@ -35,6 +44,7 @@ def setup_db():
             timestamp TEXT NOT NULL
         )
     ''')
+    
     conn.run('''
         CREATE TABLE IF NOT EXISTS signals (
             id SERIAL PRIMARY KEY,
@@ -58,14 +68,17 @@ def setup_db():
             category TEXT DEFAULT 'uncategorised'
         )
     ''')
+    
     conn.run('''
         CREATE INDEX IF NOT EXISTS idx_snapshots_market_id 
         ON snapshots(market_id)
     ''')
+    
     conn.run('''
         CREATE INDEX IF NOT EXISTS idx_signals_detected 
         ON signals(detected_at)
     ''')
+    
     conn.close()
     print("Database ready")
 
@@ -95,7 +108,7 @@ def get_last_snapshot(market_id):
     ''', market_id=market_id)
     conn.close()
     if rows:
-        return {'odds': rows[0][0], 'volume': rows[0][1], 
+        return {'odds': rows[0][0], 'volume': rows[0][1],
                 'timestamp': rows[0][2]}
     return None
 
