@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from database import (get_signals_filtered, get_signal_by_id,
                       get_signal_stats, get_recent_signals)
 from datetime import datetime
@@ -36,15 +36,9 @@ def enrich_signal(s):
     )
     return s
 
-@app.get("/")
-def root():
-    return {
-        "product": "GaugeMarket",
-        "description": "Prediction market intelligence feed",
-        "version": "1.0.0",
-        "status": "live",
-        "endpoints": ["/feed", "/signals", "/stats", "/health", "/docs"]
-    }
+@app.get("/", include_in_schema=False)
+def serve_frontend():
+    return FileResponse("frontend.html")
 
 @app.get("/feed")
 def get_feed(
@@ -105,7 +99,7 @@ def get_stats():
 @app.get("/health")
 def health():
     try:
-        stats = get_signal_stats()
+        get_signal_stats()
         db_status = "ok"
     except Exception as e:
         db_status = f"error: {str(e)}"
