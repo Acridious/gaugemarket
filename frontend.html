@@ -299,15 +299,21 @@
       const data = await res.json()
 
       document.getElementById('error-box').style.display = 'none'
-      document.getElementById('last-updated').textContent =
-        `Updated ${new Date().toLocaleTimeString()}`
 
       if (!data.feed || data.feed.length === 0) {
+        document.getElementById('last-updated').textContent = 'No signals yet'
         feed.innerHTML = renderEmpty()
         return
       }
 
       feed.innerHTML = data.feed.map(renderCard).join('')
+
+      // Show real last signal time from most recent signal
+      if (data.feed.length > 0) {
+        const latest = data.feed[0].detected_at
+        document.getElementById('last-updated').textContent =
+          `Most recent signal ${timeAgo(latest)}`
+      }
     } catch(e) {
       document.getElementById('error-box').style.display = 'block'
       document.getElementById('error-box').innerHTML =
