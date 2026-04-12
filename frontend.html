@@ -223,7 +223,7 @@
     const newsHtml = s.news_vacuum
       ? `<div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found on Yahoo Finance or Yahoo News matching this contract. Capital is leading the information record.</div></div>`
       : s.news_headline
-        ? `<div class="art"><span class="art-src">${s.news_source || 'Yahoo Finance'}</span><div class="art-hl">${s.news_headline}</div></div>`
+        ? `<div class="art"><span class="art-src">${s.news_source || 'Yahoo Finance'}</span><div class="art-hl"><a href="${s.news_url}" target="_blank" rel="noopener noreferrer" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);">${s.news_headline}</a></div></div>`
         : ''
 
     return `
