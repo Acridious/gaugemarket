@@ -46,7 +46,7 @@ def get_feed(
     category: str = Query(default=None)
 ):
     signals = get_signals_filtered(
-        min_score=60,
+        min_score=50,
         category=category,
         limit=limit
     )
