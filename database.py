@@ -1,21 +1,28 @@
 import os
+import pg8000.native
 from datetime import datetime
+from urllib.parse import urlparse
 
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
 def get_connection():
-    import psycopg2
     url = DATABASE_URL
     if url.startswith('postgres://'):
         url = url.replace('postgres://', 'postgresql://', 1)
-    conn = psycopg2.connect(url)
+    parsed = urlparse(url)
+    conn = pg8000.native.Connection(
+        host=parsed.hostname,
+        port=parsed.port or 5432,
+        database=parsed.path.lstrip('/'),
+        user=parsed.username,
+        password=parsed.password,
+        ssl_context=True
+    )
     return conn
 
 def setup_db():
     conn = get_connection()
-    cur = conn.cursor()
-
-    cur.execute('''
+    conn.run('''
         CREATE TABLE IF NOT EXISTS snapshots (
             id SERIAL PRIMARY KEY,
             market_id TEXT NOT NULL,
@@ -28,8 +35,7 @@ def setup_db():
             timestamp TEXT NOT NULL
         )
     ''')
-
-    cur.execute('''
+    conn.run('''
         CREATE TABLE IF NOT EXISTS signals (
             id SERIAL PRIMARY KEY,
             event_id TEXT NOT NULL,
@@ -52,155 +58,134 @@ def setup_db():
             category TEXT DEFAULT 'uncategorised'
         )
     ''')
-
-    cur.execute('''
+    conn.run('''
         CREATE INDEX IF NOT EXISTS idx_snapshots_market_id 
         ON snapshots(market_id)
     ''')
-
-    cur.execute('''
+    conn.run('''
         CREATE INDEX IF NOT EXISTS idx_signals_detected 
         ON signals(detected_at)
     ''')
-
-    conn.commit()
-    cur.close()
     conn.close()
     print("Database ready")
 
 def save_snapshot(market_id, event_id, event_title,
                   question, odds, volume, platform):
     conn = get_connection()
-    cur = conn.cursor()
-    cur.execute('''
+    conn.run('''
         INSERT INTO snapshots 
         (market_id, event_id, event_title, question, 
          odds, volume, platform, timestamp)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    ''', (market_id, event_id, event_title, question,
-          odds, volume, platform, datetime.now().isoformat()))
-    conn.commit()
-    cur.close()
+        VALUES (:market_id, :event_id, :event_title, :question,
+                :odds, :volume, :platform, :timestamp)
+    ''', market_id=market_id, event_id=event_id,
+        event_title=event_title, question=question,
+        odds=odds, volume=volume, platform=platform,
+        timestamp=datetime.now().isoformat())
     conn.close()
 
 def get_last_snapshot(market_id):
     conn = get_connection()
-    cur = conn.cursor()
-    cur.execute('''
+    rows = conn.run('''
         SELECT odds, volume, timestamp 
         FROM snapshots 
-        WHERE market_id = %s
+        WHERE market_id = :market_id
         ORDER BY timestamp DESC 
         LIMIT 1
-    ''', (market_id,))
-    row = cur.fetchone()
-    cur.close()
+    ''', market_id=market_id)
     conn.close()
-    if row:
-        return {'odds': row[0], 'volume': row[1], 'timestamp': row[2]}
+    if rows:
+        return {'odds': rows[0][0], 'volume': rows[0][1], 
+                'timestamp': rows[0][2]}
     return None
 
 def save_signal(signal_data):
     conn = get_connection()
-    cur = conn.cursor()
-    cur.execute('''
+    conn.run('''
         INSERT INTO signals (
             event_id, event_title, question, platform,
             prev_odds, current_odds, price_move, direction,
             volume, score, related_same_event, related_cross_event,
             news_vacuum, news_headline, news_source, news_url,
             detected_at, category
-        ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-    ''', (
-        signal_data['event_id'],
-        signal_data['event_title'],
-        signal_data['question'],
-        signal_data['platform'],
-        signal_data['prev_odds'],
-        signal_data['current_odds'],
-        signal_data['price_move'],
-        signal_data['direction'],
-        signal_data['volume'],
-        signal_data['score'],
-        signal_data.get('related_same_event', 0),
-        signal_data.get('related_cross_event', 0),
-        1 if signal_data.get('news_vacuum', True) else 0,
-        signal_data.get('news_headline'),
-        signal_data.get('news_source'),
-        signal_data.get('news_url'),
-        datetime.now().isoformat(),
-        signal_data.get('category', 'uncategorised')
-    ))
-    conn.commit()
-    cur.close()
+        ) VALUES (
+            :event_id, :event_title, :question, :platform,
+            :prev_odds, :current_odds, :price_move, :direction,
+            :volume, :score, :related_same_event, :related_cross_event,
+            :news_vacuum, :news_headline, :news_source, :news_url,
+            :detected_at, :category
+        )
+    ''',
+        event_id=signal_data['event_id'],
+        event_title=signal_data['event_title'],
+        question=signal_data['question'],
+        platform=signal_data['platform'],
+        prev_odds=signal_data['prev_odds'],
+        current_odds=signal_data['current_odds'],
+        price_move=signal_data['price_move'],
+        direction=signal_data['direction'],
+        volume=signal_data['volume'],
+        score=signal_data['score'],
+        related_same_event=signal_data.get('related_same_event', 0),
+        related_cross_event=signal_data.get('related_cross_event', 0),
+        news_vacuum=1 if signal_data.get('news_vacuum', True) else 0,
+        news_headline=signal_data.get('news_headline'),
+        news_source=signal_data.get('news_source'),
+        news_url=signal_data.get('news_url'),
+        detected_at=datetime.now().isoformat(),
+        category=signal_data.get('category', 'uncategorised')
+    )
     conn.close()
-
-def get_recent_signals(limit=20):
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute('''
-        SELECT * FROM signals
-        ORDER BY detected_at DESC
-        LIMIT %s
-    ''', (limit,))
-    rows = cur.fetchall()
-    columns = [desc[0] for desc in cur.description]
-    cur.close()
-    conn.close()
-    return [dict(zip(columns, row)) for row in rows]
 
 def get_signals_filtered(min_score=50, category=None,
                          platform=None, limit=20):
     conn = get_connection()
-    cur = conn.cursor()
-    query = "SELECT * FROM signals WHERE score >= %s"
-    params = [min_score]
+    query = "SELECT * FROM signals WHERE score >= :min_score"
+    params = {'min_score': min_score}
     if category and category != 'all':
-        query += " AND category = %s"
-        params.append(category)
+        query += " AND category = :category"
+        params['category'] = category
     if platform:
-        query += " AND platform = %s"
-        params.append(platform)
-    query += " ORDER BY detected_at DESC LIMIT %s"
-    params.append(limit)
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    columns = [desc[0] for desc in cur.description]
-    cur.close()
+        query += " AND platform = :platform"
+        params['platform'] = platform
+    query += " ORDER BY detected_at DESC LIMIT :limit"
+    params['limit'] = limit
+    rows = conn.run(query, **params)
+    columns = [c['name'] for c in conn.columns]
     conn.close()
     return [dict(zip(columns, row)) for row in rows]
 
 def get_signal_by_id(signal_id):
     conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM signals WHERE id = %s", (signal_id,))
-    row = cur.fetchone()
-    columns = [desc[0] for desc in cur.description]
-    cur.close()
+    rows = conn.run(
+        "SELECT * FROM signals WHERE id = :signal_id",
+        signal_id=signal_id
+    )
+    columns = [c['name'] for c in conn.columns]
     conn.close()
-    return dict(zip(columns, row)) if row else None
+    if rows:
+        return dict(zip(columns, rows[0]))
+    return None
+
+def get_recent_signals(limit=20):
+    return get_signals_filtered(min_score=0, limit=limit)
 
 def get_signal_stats():
     conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM signals")
-    total = cur.fetchone()[0]
-    cur.execute('''
+    total = conn.run("SELECT COUNT(*) FROM signals")[0][0]
+    today = conn.run('''
         SELECT COUNT(*) FROM signals 
         WHERE detected_at::date = CURRENT_DATE
-    ''')
-    today = cur.fetchone()[0]
-    cur.execute('''
+    ''')[0][0]
+    high_score = conn.run('''
         SELECT COUNT(*) FROM signals 
         WHERE score >= 70 AND detected_at::date = CURRENT_DATE
-    ''')
-    high_score = cur.fetchone()[0]
-    cur.execute('''
+    ''')[0][0]
+    avg_result = conn.run('''
         SELECT AVG(score) FROM signals
         WHERE detected_at::date = CURRENT_DATE
     ''')
-    avg_score = cur.fetchone()[0]
-    cur.close()
+    avg_score = avg_result[0][0] if avg_result else 0
     conn.close()
     return {
         'total': total,
