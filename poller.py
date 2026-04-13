@@ -147,6 +147,37 @@ def score_signal(price_move, mins_elapsed,
     
     return score
 
+def _build_related_contracts(same_event, cross_event):
+    """
+    Build related contracts list with previous odds for same-event markets.
+    This gives the card enough data to show each golfer's current position
+    not just a static odds number.
+    """
+    contracts = []
+
+    for m in same_event:
+        prev = get_last_snapshot(m['market_id'])
+        contracts.append({
+            'question': m['question'],
+            'odds': m['odds'],
+            'prev_odds': prev['odds'] if prev else m['odds'],
+            'platform': m['platform'],
+            'event_title': m.get('event_title', ''),
+            'type': 'same_event'
+        })
+
+    for m in cross_event:
+        contracts.append({
+            'question': m['question'],
+            'odds': m['odds'],
+            'prev_odds': m['odds'],
+            'platform': m['platform'],
+            'event_title': m.get('event_title', ''),
+            'type': 'cross_event'
+        })
+
+    return contracts
+
 def detect_signals(all_markets):
     signals = []
     now = datetime.now()
@@ -242,25 +273,9 @@ def detect_signals(all_markets):
                         if news_article else None),
             'category': category,
             'detected_at': now.isoformat(),
-            'related_contracts': json.dumps([
-                {
-                    'question': m['question'],
-                    'odds': m['odds'],
-                    'platform': m['platform'],
-                    'event_title': m.get('event_title', ''),
-                    'type': 'same_event'
-                }
-                for m in same_event[:4]
-            ] + [
-                {
-                    'question': m['question'],
-                    'odds': m['odds'],
-                    'platform': m['platform'],
-                    'event_title': m.get('event_title', ''),
-                    'type': 'cross_event'
-                }
-                for m in cross_event[:3]
-            ])
+            'related_contracts': json.dumps(
+                _build_related_contracts(same_event[:4], cross_event[:3])
+            )
         }
         
         signal_id = save_signal(signal)

@@ -240,25 +240,30 @@
 
   function renderRelatedContracts(contracts) {
     if (!contracts || contracts.length === 0) return ''
-    return `
-      <div class="related-contracts">
-        ${contracts.map(c => `
-          <div class="related-bet">
-            <div class="rb-question">"${c.question}"</div>
-            <div class="rb-meta">
-              <span class="platform-tag ${c.platform === 'Polymarket' ? 'poly' : 'kal'}">${c.platform}</span>
-              ${c.odds > 0 ? '<span class="rb-odds">' + Math.round(c.odds * 100) + '%</span>' : ''}
-              <span class="rb-type">${
-                c.type === 'causal' ? 'Causally linked' :
-                c.type === 'cross_event' ? 'Related event' :
-                c.type === 'cross_platform' ? 'Cross-platform' :
-                'Same event'
-              }</span>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-    `
+    return '<div class="related-contracts">' +
+      contracts.map(c => {
+        const curr = Math.round(c.odds * 100)
+        const prev = c.prev_odds !== undefined ? Math.round(c.prev_odds * 100) : curr
+        const moved = prev !== curr
+        const moveAmt = curr - prev
+        const moveStr = moved ? (moveAmt > 0 ? '+' + moveAmt : moveAmt) + '%' : ''
+        const moveCol = moveAmt > 0 ? '#0e9f6e' : '#c27803'
+        return '<div class="related-bet">' +
+          '<div class="rb-question">"' + c.question + '"</div>' +
+          '<div class="rb-meta">' +
+            '<span class="platform-tag ' + (c.platform === 'Polymarket' ? 'poly' : 'kal') + '">' + c.platform + '</span>' +
+            (curr > 0 ? '<span class="rb-odds">' + curr + '%</span>' : '') +
+            (moved ? '<span class="rb-move" style="color:' + moveCol + ';font-size:12px;font-family:JetBrains Mono,monospace;">' + moveStr + '</span>' : '') +
+            '<span class="rb-type">' + (
+              c.type === 'causal' ? 'Causally linked' :
+              c.type === 'cross_event' ? 'Related event' :
+              c.type === 'cross_platform' ? 'Cross-platform' :
+              'Same event'
+            ) + '</span>' +
+          '</div>' +
+        '</div>'
+      }).join('') +
+    '</div>'
   }
 
   function renderCard(s) {
