@@ -210,10 +210,16 @@ def detect_signals(all_markets):
             m['platform'] != market['platform'] 
             for m in cross_event
         )
+
+        category = get_event_category(
+            market['event_title'],
+            market['question']
+        )
         
         news_result = check_news_vacuum(
             market['event_title'],
-            market['question']
+            market['question'],
+            category=category
         )
         
         signal_score = score_signal(
@@ -227,11 +233,6 @@ def detect_signals(all_markets):
         
         if signal_score < MIN_SIGNAL_SCORE:
             continue
-        
-        category = get_event_category(
-            market['event_title'],
-            market['question']
-        )
         
         direction = 'YES' if current_odds > prev_odds else 'NO'
         
