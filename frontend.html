@@ -247,8 +247,13 @@
             <div class="rb-question">"${c.question}"</div>
             <div class="rb-meta">
               <span class="platform-tag ${c.platform === 'Polymarket' ? 'poly' : 'kal'}">${c.platform}</span>
-              <span class="rb-odds">${Math.round(c.odds * 100)}%</span>
-              <span class="rb-type">${c.type === 'cross_event' ? 'Related event' : 'Same event'}</span>
+              ${c.odds > 0 ? '<span class="rb-odds">' + Math.round(c.odds * 100) + '%</span>' : ''}
+              <span class="rb-type">${
+                c.type === 'causal' ? 'Causally linked' :
+                c.type === 'cross_event' ? 'Related event' :
+                c.type === 'cross_platform' ? 'Cross-platform' :
+                'Same event'
+              }</span>
             </div>
           </div>
         `).join('')}
