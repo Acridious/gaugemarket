@@ -1,53 +1,40 @@
 """
-Cross-event AI grouper.
-Runs every 30 minutes. Takes recent signals and asks Claude
-whether cross-event candidates are genuinely about the same
-real world event. Updates related_contracts in the DB.
+Cross-event AI grouper using Groq Llama 3.1 8B.
+Runs every 30 minutes.
+Reads unvalidated cross-event candidates from DB,
+asks Groq if each pair is genuinely about the same real world event,
+then updates related_contracts on confirmed signals.
 """
 
 import os
 import json
+import time
 import requests
-from datetime import datetime, timedelta
-from database import get_connection
+from datetime import datetime
+from database import (get_unvalidated_candidates, mark_candidate_validated,
+                      get_signal_by_id, get_connection)
 
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 GROQ_MODEL = 'llama-3.1-8b-instant'
 GROUPER_INTERVAL_MINS = 30
 
-def get_recent_signals(mins=35):
-    """Get signals from the last N minutes that have cross-event candidates."""
-    conn = get_connection()
-    cutoff = (datetime.now() - timedelta(minutes=mins)).isoformat()
-    rows = conn.run('''
-        SELECT id, event_title, question, platform, related_contracts
-        FROM signals
-        WHERE detected_at > :cutoff
-        ORDER BY detected_at DESC
-        LIMIT 50
-    ''', cutoff=cutoff)
-    columns = [c['name'] for c in conn.columns]
-    conn.close()
-    return [dict(zip(columns, row)) for row in rows]
-
-def get_all_recent_questions(mins=35):
-    """Get all questions from recent signals for cross-referencing."""
-    conn = get_connection()
-    cutoff = (datetime.now() - timedelta(minutes=mins)).isoformat()
-    rows = conn.run('''
-        SELECT DISTINCT question, event_title, platform
-        FROM signals
-        WHERE detected_at > :cutoff
-    ''', cutoff=cutoff)
-    columns = [c['name'] for c in conn.columns]
-    conn.close()
-    return [dict(zip(columns, row)) for row in rows]
-
-def ask_groq(prompt):
-    """Call Groq API using Llama 3.1 8B — fast, free, no rate limit concerns."""
+def ask_groq(question_a, event_a, question_b, event_b):
+    """
+    Ask Groq Llama 3.1 8B if two prediction market questions
+    are about the same real world event.
+    Returns True (related) or False (unrelated).
+    """
     if not GROQ_API_KEY:
-        print("No GROQ_API_KEY set — skipping AI grouping")
-        return None
+        return False
+
+    prompt = (
+        f"Are these two prediction market questions about the SAME "
+        f"real world event at the SAME time in the SAME location?\n\n"
+        f'Question 1: "{question_a}" (event: "{event_a}")\n'
+        f'Question 2: "{question_b}" (event: "{event_b}")\n\n'
+        f"Answer only YES or NO."
+    )
+
     try:
         response = requests.post(
             'https://api.groq.com/openai/v1/chat/completions',
@@ -58,204 +45,121 @@ def ask_groq(prompt):
             json={
                 'model': GROQ_MODEL,
                 'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 10,
+                'max_tokens': 5,
                 'temperature': 0
             },
             timeout=10
         )
         response.raise_for_status()
-        data = response.json()
-        return data['choices'][0]['message']['content'].strip()
+        answer = response.json()['choices'][0]['message']['content'].strip().upper()
+        return answer.startswith('YES')
     except Exception as e:
-        print(f"Groq API error: {e}")
-        return None
-
-def are_same_event(question_a, question_b, event_a, event_b):
-    """
-    Ask Claude if two questions are about the same real world event.
-    Returns True/False. Uses cheapest model (Haiku) for cost efficiency.
-    """
-    prompt = f"""Are these two prediction market questions about the SAME real world event happening at the SAME time in the SAME location?
-
-Question 1: "{question_a}" (from event: "{event_a}")
-Question 2: "{question_b}" (from event: "{event_b}")
-
-Answer only YES or NO. Do not explain."""
-
-    result = ask_groq(prompt)
-    if result is None:
+        print(f"Groq error: {e}")
         return False
-    return result.strip().upper().startswith('YES')
 
-def group_signals_with_ai(signals, all_questions):
-    """
-    For each signal, validate its cross-event related contracts using AI.
-    Remove ones that aren't genuinely related.
-    """
-    if not GROQ_API_KEY:
-        return
+def update_signal_related_contracts(signal_id, new_contract):
+    """Add a validated related contract to a signal's related_contracts JSON."""
+    conn = get_connection()
+    try:
+        rows = conn.run(
+            "SELECT related_contracts FROM signals WHERE id = :id",
+            id=signal_id
+        )
+        if not rows:
+            return
 
-    updated = 0
-
-    for signal in signals:
+        existing_raw = rows[0][0] or '[]'
         try:
-            rc = signal.get('related_contracts', '[]')
-            contracts = json.loads(rc) if isinstance(rc, str) else rc
+            existing = json.loads(existing_raw)
         except Exception:
-            contracts = []
+            existing = []
 
-        if not contracts:
-            continue
-
-        # Separate same-event (keep as-is) from cross-event (validate with AI)
-        same_event = [c for c in contracts if c.get('type') == 'same_event']
-        cross_event = [c for c in contracts if c.get('type') == 'cross_event']
-
-        if not cross_event:
-            continue  # nothing to validate
-
-        validated_cross = []
-        for candidate in cross_event:
-            related_q = candidate.get('question', '')
-            related_event = candidate.get('event_title', '')
-
-            # Skip if obviously same event title
-            if (signal['event_title'].lower()[:30] ==
-                    related_event.lower()[:30]):
-                validated_cross.append(candidate)
-                continue
-
-            is_related = are_same_event(
-                signal['question'],
-                related_q,
-                signal['event_title'],
-                related_event
-            )
-
-            if is_related:
-                validated_cross.append(candidate)
-                print(f"  AI: RELATED — {signal['question'][:50]} "
-                      f"<-> {related_q[:50]}")
-            else:
-                print(f"  AI: UNRELATED — removed {related_q[:50]}")
-
-        # Update related_contracts with validated list
-        new_contracts = same_event + validated_cross
-        if len(new_contracts) != len(contracts):
-            conn = get_connection()
+        # Don't add duplicates
+        already_there = any(
+            c.get('question') == new_contract['question']
+            for c in existing
+        )
+        if not already_there:
+            existing.append(new_contract)
             conn.run(
-                "UPDATE signals SET related_contracts = :rc WHERE id = :id",
-                rc=json.dumps(new_contracts),
-                id=signal['id']
+                "UPDATE signals SET related_contracts = :rc, "
+                "related_cross_event = related_cross_event + 1 "
+                "WHERE id = :id",
+                rc=json.dumps(existing),
+                id=signal_id
             )
-            conn.close()
-            updated += 1
-
-    print(f"AI grouper: validated {len(signals)} signals, updated {updated}")
-
-def find_new_cross_event_matches(signals, all_questions):
-    """
-    Also look for cross-platform convergence:
-    signals from different platforms about the same real world event.
-    """
-    if not GROQ_API_KEY or len(signals) < 2:
-        return
-
-    # Group signals by platform
-    poly_signals = [s for s in signals if s['platform'] == 'Polymarket']
-    kal_signals = [s for s in signals if s['platform'] == 'Kalshi']
-
-    if not poly_signals or not kal_signals:
-        return
-
-    print(f"Checking cross-platform convergence: "
-          f"{len(poly_signals)} Polymarket x {len(kal_signals)} Kalshi signals")
-
-    for poly_sig in poly_signals[:10]:  # limit to avoid too many API calls
-        for kal_sig in kal_signals[:10]:
-
-            # Quick keyword pre-filter — avoid obvious mismatches
-            poly_words = set(poly_sig['question'].lower().split())
-            kal_words = set(kal_sig['question'].lower().split())
-            common = poly_words & kal_words - {
-                'will', 'the', 'a', 'an', 'be', 'is', 'are',
-                'by', 'in', 'on', 'at', 'to', 'for', 'of',
-                'win', 'lose', 'before', 'after', 'during'
-            }
-
-            if len(common) < 2:
-                continue  # not enough overlap to even ask AI
-
-            is_same = are_same_event(
-                poly_sig['question'],
-                kal_sig['question'],
-                poly_sig['event_title'],
-                kal_sig['event_title']
-            )
-
-            if not is_same:
-                continue
-
-            print(f"  CROSS-PLATFORM MATCH FOUND:")
-            print(f"  Poly: {poly_sig['question'][:60]}")
-            print(f"  Kal:  {kal_sig['question'][:60]}")
-
-            # Add Kalshi signal to Polymarket signal's related contracts
-            conn = get_connection()
-            try:
-                rc_raw = poly_sig.get('related_contracts', '[]')
-                existing = json.loads(rc_raw) if isinstance(rc_raw, str) else rc_raw
-                already_there = any(
-                    c.get('question') == kal_sig['question']
-                    for c in existing
-                )
-                if not already_there:
-                    existing.append({
-                        'question': kal_sig['question'],
-                        'odds': 0,
-                        'platform': 'Kalshi',
-                        'event_title': kal_sig['event_title'],
-                        'type': 'cross_platform'
-                    })
-                    conn.run(
-                        "UPDATE signals SET related_contracts = :rc WHERE id = :id",
-                        rc=json.dumps(existing),
-                        id=poly_sig['id']
-                    )
-                    print(f"  Added Kalshi signal to Polymarket signal #{poly_sig['id']}")
-            except Exception as e:
-                print(f"  Error updating cross-platform: {e}")
-            finally:
-                conn.close()
+    except Exception as e:
+        print(f"Error updating signal {signal_id}: {e}")
+    finally:
+        conn.close()
 
 def run_grouper():
-    """Main grouper loop. Runs every 30 minutes."""
     print("AI Grouper starting...")
+    print(f"Model: {GROQ_MODEL} via Groq")
 
     if not GROQ_API_KEY:
-        print("WARNING: GROQ_API_KEY not set. AI grouping disabled.")
-        print("Set this in Railway variables to enable cross-event validation.")
+        print("WARNING: GROQ_API_KEY not set — AI grouping disabled")
+        print("Add GROQ_API_KEY to Railway variables to enable")
 
     while True:
         print(f"\n[Grouper] {datetime.now().strftime('%H:%M:%S')}")
 
-        signals = get_recent_signals(mins=GROUPER_INTERVAL_MINS + 5)
-        all_questions = get_all_recent_questions(mins=GROUPER_INTERVAL_MINS + 5)
+        candidates = get_unvalidated_candidates(limit=50)
+        print(f"Unvalidated candidates: {len(candidates)}")
 
-        print(f"Signals to validate: {len(signals)}")
-
-        if signals and GROQ_API_KEY:
-            # Step 1: Remove invalid cross-event matches
-            group_signals_with_ai(signals, all_questions)
-
-            # Step 2: Find new cross-platform matches
-            find_new_cross_event_matches(signals, all_questions)
+        if not candidates:
+            print("No candidates to validate")
+        elif not GROQ_API_KEY:
+            print("Skipping — no GROQ_API_KEY set")
         else:
-            print(f"Skipping AI validation (no signals or no GROQ_API_KEY)")
+            validated = 0
+            confirmed = 0
+
+            for c in candidates:
+                is_related = ask_groq(
+                    c['question_a'], c['event_title_a'],
+                    c['question_b'], c['event_title_b']
+                )
+
+                mark_candidate_validated(c['id'], is_related)
+                validated += 1
+
+                if is_related:
+                    confirmed += 1
+                    print(f"  RELATED: {c['question_a'][:45]} "
+                          f"<-> {c['question_b'][:45]}")
+
+                    # Add each signal to the other's related_contracts
+                    update_signal_related_contracts(
+                        c['signal_id_a'],
+                        {
+                            'question': c['question_b'],
+                            'odds': 0,
+                            'platform': c['platform_b'],
+                            'event_title': c['event_title_b'],
+                            'type': 'cross_event'
+                        }
+                    )
+                    update_signal_related_contracts(
+                        c['signal_id_b'],
+                        {
+                            'question': c['question_a'],
+                            'odds': 0,
+                            'platform': c['platform_a'],
+                            'event_title': c['event_title_a'],
+                            'type': 'cross_event'
+                        }
+                    )
+                else:
+                    print(f"  UNRELATED: removed pair #{c['id']}")
+
+                # Small delay between Groq calls — stay within rate limits
+                time.sleep(0.5)
+
+            print(f"Validated {validated} — {confirmed} confirmed related")
 
         sleep_secs = GROUPER_INTERVAL_MINS * 60
         print(f"Grouper sleeping {GROUPER_INTERVAL_MINS} mins...")
-        import time
         time.sleep(sleep_secs)
 
 if __name__ == '__main__':

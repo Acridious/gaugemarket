@@ -5,19 +5,12 @@ from urllib.parse import urlparse
 
 def get_connection():
     url = os.environ.get('DATABASE_URL', '')
-    
     if not url:
         raise Exception("DATABASE_URL environment variable is not set. "
                        "Add PostgreSQL to your Railway project.")
-    
-    # Railway sometimes uses postgres:// — pg8000 needs postgresql://
     if url.startswith('postgres://'):
         url = url.replace('postgres://', 'postgresql://', 1)
-    
     parsed = urlparse(url)
-    
-    print(f"Connecting to database at {parsed.hostname}...")
-    
     conn = pg8000.native.Connection(
         host=parsed.hostname,
         port=parsed.port or 5432,
@@ -30,7 +23,7 @@ def get_connection():
 
 def setup_db():
     conn = get_connection()
-    
+
     conn.run('''
         CREATE TABLE IF NOT EXISTS snapshots (
             id SERIAL PRIMARY KEY,
@@ -44,7 +37,7 @@ def setup_db():
             timestamp TEXT NOT NULL
         )
     ''')
-    
+
     conn.run('''
         CREATE TABLE IF NOT EXISTS signals (
             id SERIAL PRIMARY KEY,
@@ -70,17 +63,40 @@ def setup_db():
             news_timing TEXT DEFAULT 'unknown'
         )
     ''')
-    
+
+    # Cross-event candidates table
+    # Stores pairs of signals from different events detected close together
+    # Grouper validates these with Groq every 30 mins
+    conn.run('''
+        CREATE TABLE IF NOT EXISTS cross_event_candidates (
+            id SERIAL PRIMARY KEY,
+            signal_id_a INTEGER NOT NULL,
+            signal_id_b INTEGER NOT NULL,
+            question_a TEXT NOT NULL,
+            question_b TEXT NOT NULL,
+            event_title_a TEXT NOT NULL,
+            event_title_b TEXT NOT NULL,
+            platform_a TEXT NOT NULL,
+            platform_b TEXT NOT NULL,
+            detected_at TEXT NOT NULL,
+            validated INTEGER DEFAULT 0,
+            is_related INTEGER DEFAULT NULL
+        )
+    ''')
+
     conn.run('''
         CREATE INDEX IF NOT EXISTS idx_snapshots_market_id 
         ON snapshots(market_id)
     ''')
-    
     conn.run('''
         CREATE INDEX IF NOT EXISTS idx_signals_detected 
         ON signals(detected_at)
     ''')
-    
+    conn.run('''
+        CREATE INDEX IF NOT EXISTS idx_candidates_validated
+        ON cross_event_candidates(validated)
+    ''')
+
     conn.close()
     print("Database ready")
 
@@ -128,7 +144,7 @@ def save_signal(signal_data):
             :prev_odds, :current_odds, :price_move, :direction,
             :volume, :score, :related_same_event, :related_cross_event,
             :news_vacuum, :news_headline, :news_source, :news_url,
-            :detected_at, :category, :related_contracts
+            :detected_at, :category, :related_contracts, :news_timing
         )
     ''',
         event_id=signal_data['event_id'],
@@ -152,6 +168,77 @@ def save_signal(signal_data):
         related_contracts=signal_data.get('related_contracts', '[]'),
         news_timing=signal_data.get('news_timing', 'unknown')
     )
+    # Return the new signal's id
+    rows = conn.run("SELECT lastval()")
+    signal_id = rows[0][0] if rows else None
+    conn.close()
+    return signal_id
+
+def save_cross_event_candidate(signal_id_a, signal_id_b,
+                                question_a, question_b,
+                                event_title_a, event_title_b,
+                                platform_a, platform_b):
+    """
+    Save a pair of signals from different events as a cross-event candidate.
+    The grouper will validate these with Groq every 30 mins.
+    """
+    conn = get_connection()
+    # Check if this pair already exists to avoid duplicates
+    existing = conn.run('''
+        SELECT id FROM cross_event_candidates
+        WHERE (signal_id_a = :a AND signal_id_b = :b)
+           OR (signal_id_a = :b AND signal_id_b = :a)
+    ''', a=signal_id_a, b=signal_id_b)
+
+    if not existing:
+        conn.run('''
+            INSERT INTO cross_event_candidates (
+                signal_id_a, signal_id_b,
+                question_a, question_b,
+                event_title_a, event_title_b,
+                platform_a, platform_b,
+                detected_at
+            ) VALUES (
+                :signal_id_a, :signal_id_b,
+                :question_a, :question_b,
+                :event_title_a, :event_title_b,
+                :platform_a, :platform_b,
+                :detected_at
+            )
+        ''',
+            signal_id_a=signal_id_a,
+            signal_id_b=signal_id_b,
+            question_a=question_a,
+            question_b=question_b,
+            event_title_a=event_title_a,
+            event_title_b=event_title_b,
+            platform_a=platform_a,
+            platform_b=platform_b,
+            detected_at=datetime.now().isoformat()
+        )
+    conn.close()
+
+def get_unvalidated_candidates(limit=50):
+    """Get cross-event candidates that haven't been validated yet."""
+    conn = get_connection()
+    rows = conn.run('''
+        SELECT * FROM cross_event_candidates
+        WHERE validated = 0
+        ORDER BY detected_at DESC
+        LIMIT :limit
+    ''', limit=limit)
+    columns = [c['name'] for c in conn.columns]
+    conn.close()
+    return [dict(zip(columns, row)) for row in rows]
+
+def mark_candidate_validated(candidate_id, is_related):
+    """Mark a candidate as validated with Groq's verdict."""
+    conn = get_connection()
+    conn.run('''
+        UPDATE cross_event_candidates
+        SET validated = 1, is_related = :is_related
+        WHERE id = :id
+    ''', is_related=1 if is_related else 0, id=candidate_id)
     conn.close()
 
 def get_signals_filtered(min_score=50, category=None,

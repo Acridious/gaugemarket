@@ -3,8 +3,9 @@ import time
 import os
 import json
 from datetime import datetime
-from database import (setup_db, save_snapshot, get_last_snapshot, 
-                      save_signal, get_signal_stats)
+from database import (setup_db, save_snapshot, get_last_snapshot,
+                      save_signal, save_cross_event_candidate,
+                      get_signal_stats)
 from news import (check_news_vacuum, get_event_category, 
                   get_keyword_group, RELATED_KEYWORDS)
 
@@ -120,31 +121,19 @@ def process_kalshi_markets(markets):
     return processed
 
 def find_related_markets(signal_market, all_markets):
+    """
+    Same-event grouping uses Polymarket's own event structure — free and accurate.
+    Cross-event grouping is handled by the AI grouper (grouper.py) every 30 mins.
+    """
     same_event = []
-    cross_event = []
-    
+
     for market in all_markets:
         if market['market_id'] == signal_market['market_id']:
             continue
-        
         if market['event_id'] == signal_market['event_id']:
             same_event.append(market)
-            continue
-        
-        signal_group = get_keyword_group(
-            signal_market['event_title'],
-            signal_market['question']
-        )
-        
-        if signal_group:
-            market_group = get_keyword_group(
-                market['event_title'],
-                market['question']
-            )
-            if market_group == signal_group:
-                cross_event.append(market)
-    
-    return same_event, cross_event
+
+    return same_event, []  # cross_event left empty — AI grouper handles this
 
 def score_signal(price_move, mins_elapsed, 
                  same_event_count, cross_event_count,
@@ -286,8 +275,9 @@ def detect_signals(all_markets):
             ])
         }
         
+        signal_id = save_signal(signal)
+        signal['db_id'] = signal_id
         signals.append(signal)
-        save_signal(signal)
         
         confidence = (
             'EXTREME' if signal_score >= 80
@@ -337,6 +327,7 @@ def run():
         print(f"Total: {len(all_markets)} markets to monitor")
         
         signals = detect_signals(all_markets)
+        collect_cross_event_candidates(signals)
         
         stats = get_signal_stats()
         print(f"Signals today: {stats['today']} | "
@@ -348,3 +339,53 @@ def run():
 
 if __name__ == '__main__':
     run()
+
+def collect_cross_event_candidates(signals):
+    if len(signals) < 2:
+        return
+
+    SKIP_WORDS = {
+        'will', 'the', 'a', 'an', 'be', 'is', 'are', 'by', 'in',
+        'on', 'at', 'to', 'for', 'of', 'win', 'lose', 'before',
+        'after', 'during', 'most', 'least', 'first', 'last', 'next',
+        'have', 'has', 'had', 'does', 'did', 'when', 'what', 'which',
+        'that', 'this', 'with', 'from', 'than', 'more', 'there'
+    }
+
+    candidates_saved = 0
+
+    for i, sig_a in enumerate(signals):
+        for sig_b in signals[i+1:]:
+            if sig_a['event_id'] == sig_b['event_id']:
+                continue
+
+            words_a = set(sig_a['question'].lower().split()) - SKIP_WORDS
+            words_b = set(sig_b['question'].lower().split()) - SKIP_WORDS
+            common = words_a & words_b
+
+            if len(common) < 2:
+                continue
+
+            sig_a_id = sig_a.get('db_id')
+            sig_b_id = sig_b.get('db_id')
+
+            if not sig_a_id or not sig_b_id:
+                continue
+
+            try:
+                save_cross_event_candidate(
+                    signal_id_a=sig_a_id,
+                    signal_id_b=sig_b_id,
+                    question_a=sig_a['question'],
+                    question_b=sig_b['question'],
+                    event_title_a=sig_a['event_title'],
+                    event_title_b=sig_b['event_title'],
+                    platform_a=sig_a['platform'],
+                    platform_b=sig_b['platform']
+                )
+                candidates_saved += 1
+            except Exception as e:
+                print(f"  Error saving candidate: {e}")
+
+    if candidates_saved:
+        print(f"Saved {candidates_saved} cross-event candidates for Groq")
