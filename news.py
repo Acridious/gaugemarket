@@ -3,26 +3,41 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
+# Free RSS feeds by category
+# Priority order matters — first match stops further searching
 CATEGORY_FEEDS = {
     'political': [
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
+        ('https://www.cnbc.com/id/10000113/device/rss/rss.html', 'CNBC Politics'),
+        ('https://feeds.bbci.co.uk/news/politics/rss.xml', 'BBC Politics'),
+        ('https://apnews.com/rss/apf-politics', 'AP News'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ],
     'macro': [
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
-        ('https://finance.yahoo.com/rss/topfinstories', 'Yahoo Finance'),
+        ('https://www.cnbc.com/id/20910258/device/rss/rss.html', 'CNBC Economy'),
+        ('https://www.cnbc.com/id/10000664/device/rss/rss.html', 'CNBC Finance'),
+        ('https://feeds.marketwatch.com/marketwatch/topstories/', 'MarketWatch'),
+        ('https://finance.yahoo.com/rss/topfinstories', 'Yahoo Finance Top'),
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
     ],
     'geopolitical': [
+        ('https://feeds.bbci.co.uk/news/world/rss.xml', 'BBC World'),
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
+        ('https://apnews.com/rss/apf-intlnews', 'AP International'),
+        ('https://www.cnbc.com/id/100727362/device/rss/rss.html', 'CNBC World'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ],
     'commodities': [
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
-        ('https://finance.yahoo.com/rss/topfinstories', 'Yahoo Finance'),
+        ('https://www.cnbc.com/id/10000664/device/rss/rss.html', 'CNBC Finance'),
+        ('https://feeds.marketwatch.com/marketwatch/topstories/', 'MarketWatch'),
+        ('https://finance.yahoo.com/rss/topfinstories', 'Yahoo Finance Top'),
     ],
     'crypto': [
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
+        ('https://www.cnbc.com/id/19854910/device/rss/rss.html', 'CNBC Tech'),
+        ('https://feeds.marketwatch.com/marketwatch/topstories/', 'MarketWatch'),
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
     ],
     'sports': [
@@ -32,6 +47,7 @@ CATEGORY_FEEDS = {
         ('https://www.espn.com/espn/rss/nba/news', 'ESPN NBA'),
         ('https://www.espn.com/espn/rss/nfl/news', 'ESPN NFL'),
         ('https://www.espn.com/espn/rss/golf/news', 'ESPN Golf'),
+        ('https://feeds.bbci.co.uk/sport/rss.xml', 'BBC Sport'),
     ],
     'esports': [
         ('https://sports.yahoo.com/rss/', 'Yahoo Sports'),
@@ -39,6 +55,8 @@ CATEGORY_FEEDS = {
     ],
     'other': [
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
+        ('https://apnews.com/rss/topnews', 'AP News'),
+        ('https://feeds.bbci.co.uk/news/rss.xml', 'BBC News'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ]
 }
