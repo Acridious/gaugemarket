@@ -60,7 +60,8 @@ def setup_db():
             detected_at TEXT NOT NULL,
             category TEXT DEFAULT 'uncategorised',
             related_contracts TEXT DEFAULT '[]',
-            news_timing TEXT DEFAULT 'unknown'
+            news_timing TEXT DEFAULT 'unknown',
+            market_url TEXT
         )
     ''')
 
@@ -132,20 +133,21 @@ def get_last_snapshot(market_id):
 
 def save_signal(signal_data):
     conn = get_connection()
-    conn.run('''
+    rows = conn.run('''
         INSERT INTO signals (
             event_id, event_title, question, platform,
             prev_odds, current_odds, price_move, direction,
             volume, score, related_same_event, related_cross_event,
             news_vacuum, news_headline, news_source, news_url,
-            detected_at, category, related_contracts, news_timing
+            detected_at, category, related_contracts, news_timing, market_url
         ) VALUES (
             :event_id, :event_title, :question, :platform,
             :prev_odds, :current_odds, :price_move, :direction,
             :volume, :score, :related_same_event, :related_cross_event,
             :news_vacuum, :news_headline, :news_source, :news_url,
-            :detected_at, :category, :related_contracts, :news_timing
+            :detected_at, :category, :related_contracts, :news_timing, :market_url
         )
+        RETURNING id
     ''',
         event_id=signal_data['event_id'],
         event_title=signal_data['event_title'],
@@ -166,10 +168,10 @@ def save_signal(signal_data):
         detected_at=datetime.now().isoformat(),
         category=signal_data.get('category', 'uncategorised'),
         related_contracts=signal_data.get('related_contracts', '[]'),
-        news_timing=signal_data.get('news_timing', 'unknown')
+        news_timing=signal_data.get('news_timing', 'unknown'),
+        market_url=signal_data.get('market_url')
     )
-    # Return the new signal's id
-    rows = conn.run("SELECT lastval()")
+    # RETURNING id gives us the new row's id directly — no lastval() needed
     signal_id = rows[0][0] if rows else None
     conn.close()
     return signal_id

@@ -303,7 +303,11 @@
         '<div class="contracts-list">' +
           '<div class="contract-item primary">' +
             '<div class="bet-top">' +
-              '<div class="question">"' + s.question + '"</div>' +
+              '<div class="question">' +
+                (s.market_url
+                  ? '<a href="' + s.market_url + '" target="_blank" rel="noopener noreferrer" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);">"' + s.question + '"</a>'
+                  : '"' + s.question + '"') +
+              '</div>' +
               '<span class="platform-tag ' + (s.platform === 'Polymarket' ? 'poly' : 'kal') + '">' + s.platform + '</span>' +
             '</div>' +
             '<div class="move-row">' +

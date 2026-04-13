@@ -68,6 +68,8 @@ def process_polymarket_events(events):
                     'market_id': f"poly_{market.get('id', '')}",
                     'event_id': f"poly_event_{event.get('id', '')}",
                     'event_title': event.get('title', ''),
+                    'event_slug': event.get('slug', ''),
+                    'market_slug': market.get('slug', ''),
                     'question': market.get('question', ''),
                     'odds': yes_odds,
                     'volume': volume,
@@ -273,6 +275,11 @@ def detect_signals(all_markets):
                         if news_article else None),
             'category': category,
             'detected_at': now.isoformat(),
+            'market_url': (
+                f"https://polymarket.com/event/{market.get('event_slug')}"
+                if market.get('event_slug')
+                else f"https://polymarket.com"
+            ),
             'related_contracts': json.dumps(
                 _build_related_contracts(same_event[:4], cross_event[:3])
             )
