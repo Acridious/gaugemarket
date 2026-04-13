@@ -220,7 +220,8 @@ def detect_signals(all_markets):
         news_result = check_news_vacuum(
             market['event_title'],
             market['question'],
-            category=category
+            category=category,
+            signal_detected_at=now.isoformat()
         )
         
         signal_score = score_signal(
@@ -255,6 +256,7 @@ def detect_signals(all_markets):
             'related_cross_event': len(cross_event),
             'is_cross_platform': is_cross_platform,
             'news_vacuum': news_result['vacuum'],
+            'news_timing': news_result.get('timing', 'unknown'),
             'news_headline': (news_article['headline'] 
                              if news_article else None),
             'news_source': (news_article['source'] 

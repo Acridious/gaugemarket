@@ -1,9 +1,8 @@
 import requests
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
-# Category-aware RSS feeds
-# Each category checks the most relevant sources first
 CATEGORY_FEEDS = {
     'political': [
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
@@ -44,7 +43,6 @@ CATEGORY_FEEDS = {
     ]
 }
 
-# Sport-specific feeds based on keywords in the question
 SPORT_SPECIFIC_FEEDS = {
     'soccer': ('https://www.espn.com/espn/rss/soccer/news', 'ESPN Soccer'),
     'football': ('https://www.espn.com/espn/rss/nfl/news', 'ESPN NFL'),
@@ -121,6 +119,42 @@ RELATED_KEYWORDS = {
                   'negotiations', 'armistice']
 }
 
+def parse_article_date(pub_date_str):
+    """Parse RSS pubDate string into a naive UTC datetime."""
+    if not pub_date_str:
+        return None
+    try:
+        dt = parsedate_to_datetime(pub_date_str)
+        # Convert to UTC naive datetime for comparison
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except Exception:
+        return None
+
+def classify_article_timing(article_pub_date, signal_detected_at_str):
+    """
+    Returns:
+      'before'       — article existed before the signal (news explains the move)
+      'after'        — article appeared after the signal (signal preceded news)
+      'simultaneous' — within 30 minutes either way (unclear)
+      'unknown'      — can't determine
+    """
+    if not article_pub_date:
+        return 'unknown'
+    try:
+        signal_time = datetime.fromisoformat(signal_detected_at_str)
+        diff_minutes = (signal_time - article_pub_date).total_seconds() / 60
+
+        if diff_minutes > 30:
+            return 'before'       # article published 30+ mins before signal
+        elif diff_minutes < -30:
+            return 'after'        # article published 30+ mins after signal
+        else:
+            return 'simultaneous'
+    except Exception:
+        return 'unknown'
+
 def fetch_rss(url, source_name):
     try:
         response = requests.get(url, timeout=8, headers={
@@ -168,51 +202,62 @@ def extract_search_terms(event_title, question):
     text = f"{event_title} {question}".lower()
     terms = []
 
-    # First try related keyword groups
     for group, keywords in RELATED_KEYWORDS.items():
         matching = [kw for kw in keywords if kw in text]
         if matching:
             terms.extend(matching[:2])
 
-    # Then try sport specific keywords
     for sport_kw in SPORT_SPECIFIC_FEEDS.keys():
         if sport_kw in text and sport_kw not in terms:
             terms.append(sport_kw)
 
-    # Fallback — extract meaningful words from question
+    # Extract proper nouns from original (capitalised words = player/team names)
+    original = f"{event_title} {question}"
+    skip_words = {'Will', 'The', 'For', 'And', 'But', 'That', 'This',
+                  'With', 'From', 'When', 'What', 'Does', 'Have', 'Been',
+                  'They', 'Before', 'After', 'Which', 'Where', 'Meet',
+                  'April', 'January', 'February', 'March', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December'}
+    proper_nouns = [
+        w.strip('?"\'.,') for w in original.split()
+        if len(w) > 3
+        and w[0].isupper()
+        and w not in skip_words
+    ]
+    terms.extend([p.lower() for p in proper_nouns[:3]])
+
     if not terms:
         words = text.split()
         terms = [w for w in words
                  if len(w) > 4
-                 and w not in ['will', 'when', 'does', 'what',
-                               'that', 'this', 'with', 'from',
-                               'have', 'been', 'they', 'their',
-                               'before', 'after', 'which', 'where']][:4]
+                 and w not in ['will', 'when', 'does', 'what', 'that',
+                               'this', 'with', 'from', 'have', 'been',
+                               'they', 'their', 'before', 'after',
+                               'which', 'where']][:4]
 
-    return list(set(terms))  # deduplicate
+    return list(set(terms))
 
-def check_news_vacuum(event_title, question, category='other'):
+def check_news_vacuum(event_title, question, category='other',
+                      signal_detected_at=None):
     search_terms = extract_search_terms(event_title, question)
 
     if not search_terms:
         return {
             'vacuum': True,
             'articles': [],
+            'timing': 'unknown',
             'checked_at': datetime.now().isoformat()
         }
 
-    # Get the right feeds for this category
     feeds_to_check = CATEGORY_FEEDS.get(category, CATEGORY_FEEDS['other'])
 
-    # For sports — also add sport-specific feeds based on question content
     if category == 'sports':
         extra = get_sport_specific_feeds(event_title, question)
-        # Prepend sport-specific feeds so they're checked first
-        feeds_to_check = extra + [f for f in feeds_to_check
-                                  if f not in extra]
+        feeds_to_check = extra + [f for f in feeds_to_check if f not in extra]
 
     articles_found = []
     sources_checked = []
+    detected_at = signal_detected_at or datetime.now().isoformat()
 
     for feed_url, source_name in feeds_to_check:
         if source_name in sources_checked:
@@ -223,24 +268,39 @@ def check_news_vacuum(event_title, question, category='other'):
         for entry in entries[:25]:
             title = entry.get('title', '').lower()
             desc = entry.get('description', '').lower()
-            if any(term in title or term in desc
-                   for term in search_terms):
+            if any(term in title or term in desc for term in search_terms):
+                pub_date_str = entry.get('pubDate', '')
+                pub_date = parse_article_date(pub_date_str)
+                timing = classify_article_timing(pub_date, detected_at)
+
                 articles_found.append({
                     'headline': entry.get('title', ''),
                     'source': source_name,
                     'url': entry.get('link', ''),
-                    'published': entry.get('pubDate', '')
+                    'published': pub_date_str,
+                    'timing': timing
                 })
 
-        # Stop checking more feeds if we found articles
         if articles_found:
             break
 
     articles_found = articles_found[:3]
 
+    # Determine overall timing of best article found
+    overall_timing = 'unknown'
+    if articles_found:
+        timings = [a['timing'] for a in articles_found]
+        if 'after' in timings:
+            overall_timing = 'after'       # article broke after bet — real signal
+        elif 'simultaneous' in timings:
+            overall_timing = 'simultaneous'
+        elif 'before' in timings:
+            overall_timing = 'before'      # news existed before bet — explains move
+
     return {
         'vacuum': len(articles_found) == 0,
         'articles': articles_found,
+        'timing': overall_timing,
         'search_terms': search_terms,
         'sources_checked': sources_checked,
         'checked_at': datetime.now().isoformat()

@@ -1,3 +1,4 @@
+import json
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -23,25 +24,60 @@ CATEGORIES = [
     'commodities', 'crypto', 'sports', 'esports', 'other'
 ]
 
+def get_signal_state(s):
+    """
+    Honest signal state based on news vacuum AND article timing.
+
+    no_news      — no articles found at all → real information gap
+    confirmed    — article found AND it appeared AFTER the bet → bet preceded news
+    explained    — article found AND it appeared BEFORE the bet → news explains the move
+    uncertain    — article found but timing unclear
+    """
+    if s.get('news_vacuum'):
+        return 'no_news'
+
+    timing = s.get('news_timing', 'unknown')
+
+    if timing == 'after':
+        return 'confirmed'      # bet came first — genuinely interesting
+    elif timing == 'before':
+        return 'explained'      # news already existed — less interesting
+    elif timing == 'simultaneous':
+        return 'uncertain'      # unclear — show but caveat
+    else:
+        return 'uncertain'
+
 def enrich_signal(s):
-    import json
     s['confidence'] = (
         'extreme' if s['score'] >= 80
         else 'high' if s['score'] >= 70
         else 'medium' if s['score'] >= 60
         else 'low'
     )
-    s['state'] = (
-        'no_news' if s.get('news_vacuum')
-        else 'confirmed'
-    )
-    # Parse related contracts JSON
+    s['state'] = get_signal_state(s)
+
     try:
         rc = s.get('related_contracts', '[]')
         s['related_contracts'] = json.loads(rc) if isinstance(rc, str) else rc
-    except:
+    except Exception:
         s['related_contracts'] = []
+
     return s
+
+def deduplicate_signals(signals):
+    """
+    Keep only the highest scoring signal per unique question.
+    Prevents same market appearing multiple times from different poll cycles.
+    """
+    seen = {}
+    for s in signals:
+        key = s['question'].strip().lower()
+        if key not in seen or s['score'] > seen[key]['score']:
+            seen[key] = s
+    # Return in original order (most recent first)
+    result = list(seen.values())
+    result.sort(key=lambda x: x['detected_at'], reverse=True)
+    return result
 
 @app.get("/", include_in_schema=False)
 def serve_frontend():
@@ -49,14 +85,17 @@ def serve_frontend():
 
 @app.get("/feed")
 def get_feed(
-    limit: int = Query(default=10, le=50),
+    limit: int = Query(default=20, le=50),
     category: str = Query(default=None)
 ):
+    # Fetch more than needed so deduplication doesn't leave feed empty
     signals = get_signals_filtered(
         min_score=50,
         category=category,
-        limit=limit
+        limit=100
     )
+    # Deduplicate then trim to limit
+    signals = deduplicate_signals(signals)[:limit]
     return {
         "feed": [enrich_signal(s) for s in signals],
         "count": len(signals),

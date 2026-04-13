@@ -55,23 +55,31 @@
 
   .card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
   .card.no_news{border-left:4px solid var(--purple);}
-  .card.confirmed{border-left:4px solid var(--amber);}
+  .card.confirmed{border-left:4px solid var(--green);}
+  .card.explained{border-left:4px solid var(--ink3);}
+  .card.uncertain{border-left:4px solid var(--amber);}
   .card.played_out{border-left:4px solid var(--green);}
 
   .card-top{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
   .card.no_news .card-top{background:var(--purple-light);}
-  .card.confirmed .card-top{background:var(--amber-light);}
+  .card.confirmed .card-top{background:var(--green-light);}
+  .card.explained .card-top{background:var(--off);}
+  .card.uncertain .card-top{background:var(--amber-light);}
   .card.played_out .card-top{background:var(--green-light);}
 
   .sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
   .card.no_news .sdot{background:var(--purple);animation:pp 1.5s infinite;}
-  .card.confirmed .sdot{background:var(--amber);animation:pp 1.5s infinite;}
+  .card.confirmed .sdot{background:var(--green);animation:pp 1.5s infinite;}
+  .card.explained .sdot{background:var(--ink3);}
+  .card.uncertain .sdot{background:var(--amber);animation:pp 1.5s infinite;}
   .card.played_out .sdot{background:var(--green);}
   @keyframes pp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(1.5)}}
 
   .slabel{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;}
   .card.no_news .slabel{color:var(--purple);}
-  .card.confirmed .slabel{color:var(--amber);}
+  .card.confirmed .slabel{color:var(--green);}
+  .card.explained .slabel{color:var(--ink3);}
+  .card.uncertain .slabel{color:var(--amber);}
   .card.played_out .slabel{color:var(--green);}
 
   .cat-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:4px;text-transform:uppercase;letter-spacing:0.04em;background:var(--off);color:var(--ink3);border:1px solid var(--border);}
@@ -196,8 +204,10 @@
 
   function signalLabel(s) {
     if (s.state === 'no_news') return 'Inconsistent · No public news'
-    if (s.state === 'confirmed') return 'News confirmed after move'
-    return 'Played out · Settled'
+    if (s.state === 'confirmed') return 'News broke after position · Capital moved first'
+    if (s.state === 'explained') return 'News already existed · May explain the move'
+    if (s.state === 'uncertain') return 'News found · Timing unclear'
+    return 'Signal detected'
   }
 
   function scoreClass(confidence) {
