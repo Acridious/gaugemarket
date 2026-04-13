@@ -276,6 +276,29 @@ def get_signal_by_id(signal_id):
 def get_recent_signals(limit=20):
     return get_signals_filtered(min_score=0, limit=limit)
 
+def cleanup_old_snapshots(hours=3):
+    """Delete snapshots older than N hours — keeps DB small."""
+    conn = get_connection()
+    try:
+        result = conn.run(
+            "DELETE FROM snapshots WHERE timestamp < NOW() - INTERVAL ':hours hours'",
+            hours=hours
+        )
+        print(f"Cleaned up old snapshots (kept last {hours}h)")
+    except Exception as e:
+        # Fallback with string interpolation for interval
+        conn2 = get_connection()
+        conn2.run(
+            f"DELETE FROM snapshots WHERE timestamp < NOW() - INTERVAL '{hours} hours'"
+        )
+        conn2.close()
+        print(f"Cleaned up old snapshots (kept last {hours}h)")
+    finally:
+        try:
+            conn.close()
+        except:
+            pass
+
 def get_signal_stats():
     conn = get_connection()
     total = conn.run("SELECT COUNT(*) FROM signals")[0][0]

@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 from database import (setup_db, save_snapshot, get_last_snapshot,
                       save_signal, save_cross_event_candidate,
-                      get_signal_stats)
+                      get_signal_stats, cleanup_old_snapshots)
 from news import (check_news_vacuum, get_event_category, 
                   get_keyword_group, RELATED_KEYWORDS)
 
@@ -186,17 +186,20 @@ def detect_signals(all_markets):
     
     for market in all_markets:
         prev = get_last_snapshot(market['market_id'])
-        
-        save_snapshot(
-            market['market_id'],
-            market['event_id'],
-            market['event_title'],
-            market['question'],
-            market['odds'],
-            market['volume'],
-            market['platform']
-        )
-        
+
+        # Only save snapshot if odds changed — cuts storage 95%
+        current_odds_raw = market['odds']
+        if prev is None or abs(current_odds_raw - prev['odds']) > 0.001:
+            save_snapshot(
+                market['market_id'],
+                market['event_id'],
+                market['event_title'],
+                market['question'],
+                market['odds'],
+                market['volume'],
+                market['platform']
+            )
+
         if not prev:
             continue
         
@@ -388,6 +391,10 @@ def run():
         
         signals = detect_signals(all_markets)
         collect_cross_event_candidates(signals)
+
+        # Clean up old snapshots every hour (every 12 polls)
+        if poll_count % 12 == 0:
+            cleanup_old_snapshots()
         
         stats = get_signal_stats()
         print(f"Signals today: {stats['today']} | "
