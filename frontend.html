@@ -117,6 +117,22 @@
   .obs-text{font-size:14px;color:rgba(255,255,255,0.92);line-height:1.8;font-style:italic;}
 
   .error{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:20px;text-align:center;color:var(--red);font-size:14px;margin-bottom:20px;}
+
+  .contracts-list{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+  .contract-item{background:var(--off);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+  .contract-item.primary{background:var(--white);border-color:var(--border2);}
+  .bet-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;}
+  .related-contracts{display:flex;flex-direction:column;gap:8px;}
+  .related-bet{background:var(--off);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
+  .rb-question{font-size:13px;color:var(--ink2);line-height:1.5;margin-bottom:8px;}
+  .rb-meta{display:flex;align-items:center;gap:10px;}
+  .rb-odds{font-size:13px;font-weight:600;color:var(--ink);font-family:'JetBrains Mono',monospace;}
+  .rb-type{font-size:11px;color:var(--ink3);font-style:italic;}
+  .total-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--off);border:1px solid var(--border);border-radius:8px;}
+  .total-left{font-size:13px;color:var(--ink3);}
+  .conv-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:4px;}
+  .conv-badge.cross{background:#dbeafe;color:#1e40af;}
+  .conv-badge.same{background:#f0fdf4;color:#065f46;}
 </style>
 </head>
 <body>
@@ -212,56 +228,88 @@
     return `"Signal detected and tracked through to resolution. ${platform} contract moved ${move} points. Full record logged."`
   }
 
+  function renderRelatedContracts(contracts) {
+    if (!contracts || contracts.length === 0) return ''
+    return `
+      <div class="related-contracts">
+        ${contracts.map(c => `
+          <div class="related-bet">
+            <div class="rb-question">"${c.question}"</div>
+            <div class="rb-meta">
+              <span class="platform-tag ${c.platform === 'Polymarket' ? 'poly' : 'kal'}">${c.platform}</span>
+              <span class="rb-odds">${Math.round(c.odds * 100)}%</span>
+              <span class="rb-type">${c.type === 'cross_event' ? 'Related event' : 'Same event'}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `
+  }
+
   function renderCard(s) {
     const color = moveColor(s)
     const isUp = s.direction === 'YES'
     const moveBadgeClass = s.state === 'no_news' ? 'move-up' : (isUp ? 'move-up' : 'move-down')
-    const moveSign = isUp ? '+' : '−'
+    const moveSign = isUp ? '+' : '-'
     const moveAmt = Math.round(s.price_move * 100)
     const fillWidth = Math.round(s.current_odds * 100)
+    const related = s.related_contracts || []
+    const totalContracts = 1 + related.length
+    const platforms = [...new Set([s.platform, ...related.map(r => r.platform)])]
+    const crossPlatform = platforms.length > 1
 
     const newsHtml = s.news_vacuum
-      ? `<div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found on Yahoo Finance or Yahoo News matching this contract. Capital is leading the information record.</div></div>`
+      ? '<div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div>'
       : s.news_headline
-        ? `<div class="art"><span class="art-src">${s.news_source || 'Yahoo Finance'}</span><div class="art-hl"><a href="${s.news_url}" target="_blank" rel="noopener noreferrer" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);">${s.news_headline}</a></div></div>`
+        ? '<div class="art"><span class="art-src">' + (s.news_source || 'Yahoo Finance') + '</span><div class="art-hl"><a href="' + s.news_url + '" target="_blank" rel="noopener noreferrer" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);">' + s.news_headline + '</a></div></div>'
         : ''
 
-    return `
-      <div class="card ${s.state}">
-        <div class="card-top">
-          <div class="sdot"></div>
-          <span class="slabel">${signalLabel(s)}</span>
-          <span class="cat-badge">${s.category}</span>
-          <span class="score-badge ${scoreClass(s.confidence)}">Score ${s.score}</span>
-          <span class="stime">${timeAgo(s.detected_at)}</span>
-        </div>
-        <div class="card-body">
-          <div class="question">
-            "${s.question}"
-            <span class="platform-tag ${s.platform === 'Polymarket' ? 'poly' : 'kal'}">${s.platform}</span>
-          </div>
-          <div class="move-row">
-            <span class="o-from">${Math.round(s.prev_odds * 100)}%</span>
-            <span class="o-arr">→</span>
-            <span class="o-to" style="color:${color}">${Math.round(s.current_odds * 100)}%</span>
-            <span class="o-badge ${moveBadgeClass}">${moveSign}${moveAmt}%</span>
-            <div class="o-track"><div class="o-fill" style="width:${fillWidth}%;background:${color}"></div></div>
-          </div>
-          <div class="meta-row">
-            <span class="meta">Platform <strong>${s.platform}</strong></span>
-            <span class="meta">Direction <strong>${s.direction}</strong></span>
-            ${s.related_same_event > 0 ? `<span class="meta">Related contracts <strong>${s.related_same_event}</strong></span>` : ''}
-            ${s.related_cross_event > 0 ? `<span class="meta">Cross-event <strong>${s.related_cross_event}</strong></span>` : ''}
-          </div>
-        </div>
-        ${newsHtml ? `<div class="news-section"><div class="ns-label">News check</div>${newsHtml}</div>` : ''}
-        <div class="obs">
-          <div class="obs-label">Something's going on here</div>
-          <div class="obs-text">${buildObservation(s)}</div>
-        </div>
-      </div>
-    `
+    const convergenceBadge = crossPlatform
+      ? '<span class="conv-badge cross">Cross-platform</span>'
+      : totalContracts > 2
+        ? '<span class="conv-badge same">Multiple contracts</span>'
+        : ''
+
+    return '<div class="card ' + s.state + '">' +
+      '<div class="card-top">' +
+        '<div class="sdot"></div>' +
+        '<span class="slabel">' + signalLabel(s) + '</span>' +
+        '<span class="cat-badge">' + s.category + '</span>' +
+        convergenceBadge +
+        '<span class="score-badge ' + scoreClass(s.confidence) + '">Score ' + s.score + '</span>' +
+        '<span class="stime">' + timeAgo(s.detected_at) + '</span>' +
+      '</div>' +
+      '<div class="card-body">' +
+        '<div class="contracts-list">' +
+          '<div class="contract-item primary">' +
+            '<div class="bet-top">' +
+              '<div class="question">"' + s.question + '"</div>' +
+              '<span class="platform-tag ' + (s.platform === 'Polymarket' ? 'poly' : 'kal') + '">' + s.platform + '</span>' +
+            '</div>' +
+            '<div class="move-row">' +
+              '<span class="o-from">' + Math.round(s.prev_odds * 100) + '%</span>' +
+              '<span class="o-arr">to</span>' +
+              '<span class="o-to" style="color:' + color + '">' + Math.round(s.current_odds * 100) + '%</span>' +
+              '<span class="o-badge ' + moveBadgeClass + '">' + moveSign + moveAmt + '%</span>' +
+              '<div class="o-track"><div class="o-fill" style="width:' + fillWidth + '%;background:' + color + '"></div></div>' +
+            '</div>' +
+          '</div>' +
+          (related.length > 0 ? renderRelatedContracts(related) : '') +
+        '</div>' +
+        (totalContracts > 1 ? (
+          '<div class="total-row">' +
+            '<span class="total-left">' + totalContracts + ' related contract' + (totalContracts > 1 ? 's' : '') + ' · ' + platforms.join(' + ') + (crossPlatform ? ' · Cross-platform' : '') + '</span>' +
+          '</div>'
+        ) : '') +
+      '</div>' +
+      (newsHtml ? '<div class="news-section"><div class="ns-label">News check</div>' + newsHtml + '</div>' : '') +
+      '<div class="obs">' +
+        '<div class="obs-label">Something\'s going on here</div>' +
+        '<div class="obs-text">' + buildObservation(s) + '</div>' +
+      '</div>' +
+    '</div>'
   }
+
 
   function renderEmpty() {
     return `

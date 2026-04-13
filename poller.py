@@ -1,6 +1,7 @@
 import requests
 import time
 import os
+import json
 from datetime import datetime
 from database import (setup_db, save_snapshot, get_last_snapshot, 
                       save_signal, get_signal_stats)
@@ -260,25 +261,27 @@ def detect_signals(all_markets):
                            if news_article else None),
             'news_url': (news_article['url'] 
                         if news_article else None),
-            'same_event_markets': [
+            'category': category,
+            'detected_at': now.isoformat(),
+            'related_contracts': json.dumps([
                 {
                     'question': m['question'],
                     'odds': m['odds'],
-                    'platform': m['platform']
+                    'platform': m['platform'],
+                    'event_title': m.get('event_title', ''),
+                    'type': 'same_event'
                 }
-                for m in same_event[:5]
-            ],
-            'cross_event_markets': [
+                for m in same_event[:4]
+            ] + [
                 {
-                    'event_title': m['event_title'],
                     'question': m['question'],
                     'odds': m['odds'],
-                    'platform': m['platform']
+                    'platform': m['platform'],
+                    'event_title': m.get('event_title', ''),
+                    'type': 'cross_event'
                 }
                 for m in cross_event[:3]
-            ],
-            'category': category,
-            'detected_at': now.isoformat()
+            ])
         }
         
         signals.append(signal)

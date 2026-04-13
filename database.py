@@ -65,7 +65,8 @@ def setup_db():
             news_source TEXT,
             news_url TEXT,
             detected_at TEXT NOT NULL,
-            category TEXT DEFAULT 'uncategorised'
+            category TEXT DEFAULT 'uncategorised',
+            related_contracts TEXT DEFAULT '[]'
         )
     ''')
     
@@ -120,13 +121,13 @@ def save_signal(signal_data):
             prev_odds, current_odds, price_move, direction,
             volume, score, related_same_event, related_cross_event,
             news_vacuum, news_headline, news_source, news_url,
-            detected_at, category
+            detected_at, category, related_contracts
         ) VALUES (
             :event_id, :event_title, :question, :platform,
             :prev_odds, :current_odds, :price_move, :direction,
             :volume, :score, :related_same_event, :related_cross_event,
             :news_vacuum, :news_headline, :news_source, :news_url,
-            :detected_at, :category
+            :detected_at, :category, :related_contracts
         )
     ''',
         event_id=signal_data['event_id'],
@@ -146,7 +147,8 @@ def save_signal(signal_data):
         news_source=signal_data.get('news_source'),
         news_url=signal_data.get('news_url'),
         detected_at=datetime.now().isoformat(),
-        category=signal_data.get('category', 'uncategorised')
+        category=signal_data.get('category', 'uncategorised'),
+        related_contracts=signal_data.get('related_contracts', '[]')
     )
     conn.close()
 

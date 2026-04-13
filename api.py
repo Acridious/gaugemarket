@@ -24,6 +24,7 @@ CATEGORIES = [
 ]
 
 def enrich_signal(s):
+    import json
     s['confidence'] = (
         'extreme' if s['score'] >= 80
         else 'high' if s['score'] >= 70
@@ -34,6 +35,12 @@ def enrich_signal(s):
         'no_news' if s.get('news_vacuum')
         else 'confirmed'
     )
+    # Parse related contracts JSON
+    try:
+        rc = s.get('related_contracts', '[]')
+        s['related_contracts'] = json.loads(rc) if isinstance(rc, str) else rc
+    except:
+        s['related_contracts'] = []
     return s
 
 @app.get("/", include_in_schema=False)
