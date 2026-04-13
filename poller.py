@@ -37,22 +37,10 @@ def fetch_polymarket_events():
         return []
 
 def fetch_kalshi_markets():
-    try:
-        response = requests.get(
-            f'{KALSHI_API}/markets',
-            params={
-                'status': 'open',
-                'limit': 100
-            },
-            headers={'accept': 'application/json'},
-            timeout=10
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data.get('markets', [])
-    except Exception as e:
-        print(f"Kalshi fetch error: {e}")
-        return []
+    # Kalshi now requires authentication on their API
+    # Returning empty list until auth is configured
+    # Polymarket data is sufficient for signal detection
+    return []
 
 def process_polymarket_events(events):
     processed = []
@@ -305,41 +293,6 @@ News:      {"VACUUM - no articles found" if news_result["vacuum"]
     
     return signals
 
-def run():
-    print("GaugeMarket Poller starting...")
-    setup_db()
-    
-    poll_count = 0
-    
-    while True:
-        poll_count += 1
-        print(f"\n[Poll #{poll_count}] {datetime.now().strftime('%H:%M:%S')}")
-        
-        poly_events = fetch_polymarket_events()
-        poly_markets = process_polymarket_events(poly_events)
-        print(f"Polymarket: {len(poly_markets)} active markets")
-        
-        kal_markets_raw = fetch_kalshi_markets()
-        kal_markets = process_kalshi_markets(kal_markets_raw)
-        print(f"Kalshi: {len(kal_markets)} active markets")
-        
-        all_markets = poly_markets + kal_markets
-        print(f"Total: {len(all_markets)} markets to monitor")
-        
-        signals = detect_signals(all_markets)
-        collect_cross_event_candidates(signals)
-        
-        stats = get_signal_stats()
-        print(f"Signals today: {stats['today']} | "
-              f"Total: {stats['total']} | "
-              f"High confidence: {stats['high_confidence']}")
-        
-        print(f"Sleeping {POLL_INTERVAL}s until next poll...")
-        time.sleep(POLL_INTERVAL)
-
-if __name__ == '__main__':
-    run()
-
 def collect_cross_event_candidates(signals):
     if len(signals) < 2:
         return
@@ -389,3 +342,38 @@ def collect_cross_event_candidates(signals):
 
     if candidates_saved:
         print(f"Saved {candidates_saved} cross-event candidates for Groq")
+
+def run():
+    print("GaugeMarket Poller starting...")
+    setup_db()
+    
+    poll_count = 0
+    
+    while True:
+        poll_count += 1
+        print(f"\n[Poll #{poll_count}] {datetime.now().strftime('%H:%M:%S')}")
+        
+        poly_events = fetch_polymarket_events()
+        poly_markets = process_polymarket_events(poly_events)
+        print(f"Polymarket: {len(poly_markets)} active markets")
+        
+        kal_markets_raw = fetch_kalshi_markets()
+        kal_markets = process_kalshi_markets(kal_markets_raw)
+        print(f"Kalshi: {len(kal_markets)} active markets")
+        
+        all_markets = poly_markets + kal_markets
+        print(f"Total: {len(all_markets)} markets to monitor")
+        
+        signals = detect_signals(all_markets)
+        collect_cross_event_candidates(signals)
+        
+        stats = get_signal_stats()
+        print(f"Signals today: {stats['today']} | "
+              f"Total: {stats['total']} | "
+              f"High confidence: {stats['high_confidence']}")
+        
+        print(f"Sleeping {POLL_INTERVAL}s until next poll...")
+        time.sleep(POLL_INTERVAL)
+
+if __name__ == '__main__':
+    run()
