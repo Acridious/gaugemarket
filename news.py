@@ -10,7 +10,7 @@ CATEGORY_FEEDS = {
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
         ('https://www.cnbc.com/id/10000113/device/rss/rss.html', 'CNBC Politics'),
         ('https://feeds.bbci.co.uk/news/politics/rss.xml', 'BBC Politics'),
-        ('https://apnews.com/rss/apf-politics', 'AP News'),
+        ('https://apnews.com/rss/politics', 'AP News'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ],
     'macro': [
@@ -24,7 +24,7 @@ CATEGORY_FEEDS = {
     'geopolitical': [
         ('https://feeds.bbci.co.uk/news/world/rss.xml', 'BBC World'),
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
-        ('https://apnews.com/rss/apf-intlnews', 'AP International'),
+        ('https://apnews.com/rss/world-news', 'AP International'),
         ('https://www.cnbc.com/id/100727362/device/rss/rss.html', 'CNBC World'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ],
@@ -55,7 +55,7 @@ CATEGORY_FEEDS = {
     ],
     'other': [
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
-        ('https://apnews.com/rss/topnews', 'AP News'),
+        ('https://apnews.com/rss/ap-top-news', 'AP News'),
         ('https://feeds.bbci.co.uk/news/rss.xml', 'BBC News'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ]

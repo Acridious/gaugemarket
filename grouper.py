@@ -16,7 +16,9 @@ import time
 import requests
 from datetime import datetime
 from database import (get_unvalidated_candidates, mark_candidate_validated,
-                      get_signal_by_id, get_connection)
+                      get_signal_by_id, get_connection,
+                      get_recent_signals_for_grouping,
+                      save_cross_event_candidate)
 
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 GROQ_MODEL = 'llama-3.1-8b-instant'
@@ -172,6 +174,66 @@ def get_signal_category(signal_id):
     finally:
         conn.close()
 
+def collect_candidates_from_recent_signals():
+    """
+    Look at all signals from last 35 mins across ALL poll cycles.
+    Find pairs from different events with keyword overlap.
+    Save as candidates for Groq to validate.
+    This catches cross-event signals that didn't fire in the same poll.
+    """
+    signals = get_recent_signals_for_grouping(mins=35)
+    if len(signals) < 2:
+        print(f"Not enough recent signals to pair ({len(signals)})")
+        return
+
+    SKIP_WORDS = {
+        'will', 'the', 'a', 'an', 'be', 'is', 'are', 'by', 'in',
+        'on', 'at', 'to', 'for', 'of', 'win', 'lose', 'before',
+        'after', 'during', 'most', 'least', 'first', 'last', 'next',
+        'have', 'has', 'had', 'does', 'did', 'when', 'what', 'which',
+        'that', 'this', 'with', 'from', 'than', 'more', 'there',
+        '2026', '2027', '2028', 'january', 'february', 'march',
+        'april', 'may', 'june', 'july', 'august', 'september',
+        'october', 'november', 'december'
+    }
+
+    saved = 0
+    for i, sig_a in enumerate(signals):
+        for sig_b in signals[i+1:]:
+            # Skip same event
+            if sig_a['event_id'] == sig_b['event_id']:
+                continue
+
+            words_a = set(sig_a['question'].lower().split()) - SKIP_WORDS
+            words_b = set(sig_b['question'].lower().split()) - SKIP_WORDS
+            common = words_a & words_b
+
+            # Lower threshold for sports (tournament name alone = 1 word)
+            cat_a = sig_a.get('category', 'other')
+            cat_b = sig_b.get('category', 'other')
+            min_common = 1 if (cat_a in ('sports', 'esports') or
+                               cat_b in ('sports', 'esports')) else 2
+
+            if len(common) < min_common:
+                continue
+
+            try:
+                save_cross_event_candidate(
+                    signal_id_a=sig_a['id'],
+                    signal_id_b=sig_b['id'],
+                    question_a=sig_a['question'],
+                    question_b=sig_b['question'],
+                    event_title_a=sig_a['event_title'],
+                    event_title_b=sig_b['event_title'],
+                    platform_a=sig_a['platform'],
+                    platform_b=sig_b['platform']
+                )
+                saved += 1
+            except Exception as e:
+                pass  # Duplicate pairs silently ignored
+
+    print(f"Collected {saved} new cross-event candidates from {len(signals)} recent signals")
+
 def run_grouper():
     print("AI Grouper starting...")
     print(f"Model: {GROQ_MODEL} via Groq")
@@ -184,6 +246,9 @@ def run_grouper():
 
     while True:
         print(f"\n[Grouper] {datetime.now().strftime('%H:%M:%S')}")
+
+        # First collect new candidates from recent signals across all polls
+        collect_candidates_from_recent_signals()
 
         candidates = get_unvalidated_candidates(limit=50)
         print(f"Unvalidated candidates: {len(candidates)}")

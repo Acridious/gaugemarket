@@ -220,6 +220,24 @@ def save_cross_event_candidate(signal_id_a, signal_id_b,
         )
     conn.close()
 
+def get_recent_signals_for_grouping(mins=35):
+    """Get recent signals for cross-event candidate collection."""
+    conn = get_connection()
+    cutoff = (datetime.now() - 
+              __import__('datetime').timedelta(minutes=mins)
+              ).isoformat()
+    rows = conn.run('''
+        SELECT id, event_id, event_title, question, 
+               platform, category, score
+        FROM signals
+        WHERE detected_at > :cutoff
+        ORDER BY detected_at DESC
+        LIMIT 100
+    ''', cutoff=cutoff)
+    columns = [c['name'] for c in conn.columns]
+    conn.close()
+    return [dict(zip(columns, row)) for row in rows]
+
 def get_unvalidated_candidates(limit=50):
     """Get cross-event candidates that haven't been validated yet."""
     conn = get_connection()
@@ -277,26 +295,27 @@ def get_recent_signals(limit=20):
     return get_signals_filtered(min_score=0, limit=limit)
 
 def cleanup_old_snapshots(hours=3):
-    """Delete snapshots older than N hours — keeps DB small."""
+    """Delete snapshots older than N hours — keeps DB small.
+    
+    Timestamp stored as TEXT so we compare as text using ISO format.
+    cutoff = datetime N hours ago formatted as ISO string.
+    """
     conn = get_connection()
     try:
-        result = conn.run(
-            "DELETE FROM snapshots WHERE timestamp < NOW() - INTERVAL ':hours hours'",
-            hours=hours
+        cutoff = (datetime.now() - 
+                  __import__('datetime').timedelta(hours=hours)
+                  ).isoformat()
+        conn.run(
+            "DELETE FROM snapshots WHERE timestamp < :cutoff",
+            cutoff=cutoff
         )
         print(f"Cleaned up old snapshots (kept last {hours}h)")
     except Exception as e:
-        # Fallback with string interpolation for interval
-        conn2 = get_connection()
-        conn2.run(
-            f"DELETE FROM snapshots WHERE timestamp < NOW() - INTERVAL '{hours} hours'"
-        )
-        conn2.close()
-        print(f"Cleaned up old snapshots (kept last {hours}h)")
+        print(f"Cleanup error (non-fatal): {e}")
     finally:
         try:
             conn.close()
-        except:
+        except Exception:
             pass
 
 def get_signal_stats():
