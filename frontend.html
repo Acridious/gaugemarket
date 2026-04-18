@@ -400,8 +400,8 @@ function renderIntelCard(s) {
     </div>
     ${newsHtml}
     <div class="obs">
-      <div class="obs-label">Something's going on here</div>
-      <div class="obs-text">${buildObservation(s)}</div>
+      <div class="obs-label">${s.ai_summary ? 'What this means' : "Something's going on here"}</div>
+      <div class="obs-text">${s.ai_summary || buildObservation(s)}</div>
     </div>
   </div>`
 }

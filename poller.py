@@ -21,11 +21,12 @@ from datetime import datetime, timedelta
 
 from database import (
     setup_db, save_snapshot, get_last_snapshot,
-    save_signal, save_cross_event_candidate,
+    save_signal,
     get_signal_stats, cleanup_old_data,
     save_volume_snapshot,
 )
-from news import check_news_vacuum, get_event_category, get_keyword_group, RELATED_KEYWORDS
+from inline_grouper import run_inline_grouper
+from news import check_news_vacuum, get_event_category, get_keyword_group, RELATED_KEYWORDS, generate_signal_summary
 from constants import (
     SKIP_WORDS,
     CAUSAL_CATEGORIES,
@@ -472,6 +473,22 @@ def detect_signals(all_markets):
 
         sports_label = sports_context_label(current_odds, prev_odds, category)
 
+        # Generate AI summary — runs after news check so it has article context.
+        # For vacuum signals: reasons about what informed capital might know.
+        # For news signals: connects article content to the specific contract move.
+        ai_summary = generate_signal_summary(
+            event_title=market['event_title'],
+            question=market['question'],
+            prev_odds=prev_odds,
+            current_odds=current_odds,
+            price_move=price_move,
+            direction=direction,
+            category=category,
+            news_article=news_article,
+            news_vacuum=news_result['vacuum'],
+            sports_context=sports_label,
+        )
+
         signal = {
             'event_id':            market['event_id'],
             'event_title':         market['event_title'],
@@ -496,6 +513,7 @@ def detect_signals(all_markets):
             'is_terminal':         terminal,
             'mins_elapsed':        round(mins_elapsed, 1),
             'sports_context':      sports_label,
+            'ai_summary':          ai_summary,
             'market_url': (
                 f"https://polymarket.com/event/{market.get('event_slug')}"
                 if market.get('event_slug')
@@ -529,6 +547,7 @@ Move:      {prev_odds:.1%} → {current_odds:.1%} ({direction})
 Change:    +{price_move:.1%} in {mins_elapsed:.1f} mins
 Category:  {category}{f" / {sports_label}" if sports_label else ""}
 Related:   {len(same_event)} same-event | {len(cross_event)} cross-event
+Summary:   {ai_summary[:80] + "..." if ai_summary and len(ai_summary) > 80 else ai_summary or "—"}
 News:      {"VACUUM" if news_result["vacuum"] else f"FOUND ({news_result.get("timing","?")}): {news_article["headline"][:60] if news_article else ""}..."}
 {"="*60}
         ''')
@@ -612,7 +631,7 @@ def run():
         print(f"Total: {len(all_markets)} markets | ${total_volume:,.0f} volume")
 
         signals = detect_signals(all_markets)
-        collect_cross_event_candidates(signals)
+        run_inline_grouper(signals)  # causal linking via Groq, inline
 
         # Cleanup runs hourly (every 12 polls at 5-min interval)
         if poll_count % 12 == 0:

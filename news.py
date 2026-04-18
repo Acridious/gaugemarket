@@ -307,56 +307,31 @@ def extract_search_terms(event_title, question):
 def is_article_relevant(article_headline, event_title, question, article_description=''):
     """
     Ask Groq if a news article is genuinely about this specific contract.
-
-    Uses a strict prompt with explicit examples of YES and NO cases.
+    Uses groq_client so the API key and model live in one place.
     Defaults to False on error — better to show no news than wrong news.
     """
-    groq_key = os.environ.get('GROQ_API_KEY', '')
-    if not groq_key:
-        return False  # no key — don't show potentially wrong articles
-
-    try:
-        prompt = (
-            "You are checking if a news article is directly relevant to a "
-            "prediction market contract. Be strict — only say YES if the "
-            "article is specifically and directly about the exact same topic.\n\n"
-            + f"PREDICTION MARKET CONTRACT:\n"
-            + f"Event: {event_title}\n"
-            + f"Question: {question}\n\n"
-            + f"NEWS ARTICLE HEADLINE:\n{article_headline}\n"
-            + (f"ARTICLE CONTEXT:\n{article_description[:400]}\n\n" if article_description else "\n")
-            + "Rules:\n"
-            + "- YES: article is directly about the same specific event, location, person, or team\n"
-            + "- NO: article is about a different event, different country, different team\n"
-            + "- NO: article is only loosely related by topic (e.g. weather article about wrong city)\n"
-            + "- NO: article mentions a related concept but not this specific contract\n"
-            + "- When in doubt, answer NO\n\n"
-            + "Answer with only YES or NO, nothing else."
-        )
-        response = requests.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            headers={
-                'Authorization': f'Bearer {groq_key}',
-                'Content-Type': 'application/json'
-            },
-            json={
-                'model': 'llama-3.1-8b-instant',
-                'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 5,
-                'temperature': 0
-            },
-            timeout=8
-        )
-        response.raise_for_status()
-        answer = (response.json()['choices'][0]['message']['content']
-                  .strip().upper())
-        is_relevant = answer.startswith('YES')
-        if not is_relevant:
-            print(f"  Groq: irrelevant — {article_headline[:50]}")
-        return is_relevant
-    except Exception as e:
-        print(f"  Groq relevance error: {e}")
-        return False  # on error — don't show potentially wrong articles
+    from groq_client import groq_yes_no
+    prompt = (
+        "You are checking if a news article is directly relevant to a "
+        "prediction market contract. Be strict — only say YES if the "
+        "article is specifically and directly about the exact same topic.\n\n"
+        f"PREDICTION MARKET CONTRACT:\n"
+        f"Event: {event_title}\n"
+        f"Question: {question}\n\n"
+        f"NEWS ARTICLE HEADLINE:\n{article_headline}\n"
+        + (f"ARTICLE CONTEXT:\n{article_description[:400]}\n\n" if article_description else "\n")
+        + "Rules:\n"
+        "- YES: article is directly about the same specific event, location, person, or team\n"
+        "- NO: article is about a different event, different country, different team\n"
+        "- NO: article is only loosely related by topic (e.g. weather article about wrong city)\n"
+        "- NO: article mentions a related concept but not this specific contract\n"
+        "- When in doubt, answer NO\n\n"
+        "Answer with only YES or NO, nothing else."
+    )
+    result = groq_yes_no(prompt)
+    if not result:
+        print(f"  Groq: irrelevant — {article_headline[:50]}")
+    return result
 
 def check_news_vacuum(event_title, question, category='other',
                       signal_detected_at=None):
@@ -454,3 +429,162 @@ def check_news_vacuum(event_title, question, category='other',
         'sources_checked': sources_checked,
         'checked_at': datetime.now().isoformat()
     }
+
+
+# ---------------------------------------------------------------------------
+# AI summary generation
+# ---------------------------------------------------------------------------
+
+def generate_signal_summary(
+    event_title, question, prev_odds, current_odds,
+    price_move, direction, category,
+    news_article=None, news_vacuum=True,
+    sports_context=None
+):
+    """
+    Generate a 2-3 sentence AI summary of the signal.
+
+    Two completely different prompts depending on whether news was found:
+
+    NEWS FOUND — summarise what happened and connect it to the contract.
+    Example output: "Haaland has been ruled out of Saturday's match with
+    a knee injury sustained in training. This directly explains the sharp
+    drop in City's win probability from 68% to 51%, as he has scored in
+    7 of their last 9 home games."
+
+    NO NEWS (vacuum) — reason about what smart money might know.
+    Example output: "No public news explains this move. A 17-point shift
+    on a geopolitical contract in under 10 minutes typically suggests
+    informed positioning — possible sources include diplomatic back-channels,
+    leaked policy decisions, or early intelligence on a military development."
+    """
+    from groq_client import groq_yes_no, groq_available, GROQ_API_KEY, GROQ_URL, GROQ_MODEL
+    import requests as _requests
+
+    if not groq_available():
+        return None
+
+    prev_pct    = round(prev_odds * 100)
+    curr_pct    = round(current_odds * 100)
+    move_pct    = round(price_move * 100)
+    dir_word    = 'up' if direction == 'YES' else 'down'
+
+    if news_article and not news_vacuum:
+        # ── NEWS FOUND ──────────────────────────────────────────────────
+        headline    = news_article.get('headline', '')
+        description = news_article.get('description', '') or ''
+        source      = news_article.get('source', '')
+        timing      = news_article.get('timing', 'unknown')
+
+        timing_note = {
+            'before':        'The article was published before the price move.',
+            'after':         'The article appeared after the price move — capital moved first.',
+            'simultaneous':  'The article and price move appeared at roughly the same time.',
+        }.get(timing, '')
+
+        prompt = (
+            "You are a prediction market analyst. Write exactly 2-3 sentences "
+            "explaining what happened and what it means for this contract. "
+            "Be specific and direct. Do not use vague language. "
+            "Do not start with 'I' or repeat the question back.\n\n"
+            f"CONTRACT: {question}\n"
+            f"EVENT: {event_title}\n"
+            f"CATEGORY: {category}\n"
+            f"PRICE MOVE: {prev_pct}% → {curr_pct}% ({dir_word}, {move_pct} points)\n\n"
+            f"NEWS HEADLINE: {headline}\n"
+            f"NEWS SOURCE: {source}\n"
+            f"ARTICLE CONTEXT: {description[:600]}\n"
+            f"TIMING: {timing_note}\n\n"
+            "Write 2-3 sentences: first explain what the news says in plain language, "
+            "then connect it specifically to why this contract moved in this direction "
+            "by this amount. If the article appeared before the move, note the market "
+            "may be catching up. If after, note capital moved ahead of public news."
+        )
+    else:
+        # ── NEWS VACUUM ─────────────────────────────────────────────────
+        # Category-specific reasoning about what informed money might know
+        category_context = {
+            'geopolitical': (
+                "Geopolitical contracts move slowly by nature. An unexplained move "
+                "of this size often reflects off-channel intelligence: diplomatic "
+                "back-channels, early military intelligence, or leaked policy decisions."
+            ),
+            'macro': (
+                "Macro contracts rarely move sharply without cause. Unexplained moves "
+                "often precede central bank leaks, early access to economic data, "
+                "or positioning ahead of a scheduled announcement."
+            ),
+            'political': (
+                "Political contracts without news often reflect internal polling, "
+                "leaked decisions, or early knowledge of an announcement before "
+                "it reaches the press."
+            ),
+            'crypto': (
+                "Crypto prediction markets can move on on-chain data, large wallet "
+                "movements, or exchange intelligence not yet visible in news feeds."
+            ),
+            'commodities': (
+                "Commodity contracts sometimes move on supply-chain intelligence, "
+                "early OPEC signalling, or weather/logistics data before it is "
+                "publicly reported."
+            ),
+            'sports': (
+                "Pre-game sports contracts without news may reflect lineup leaks, "
+                "injury information shared in team circles, or sharp money from "
+                "bettors with insider knowledge of team preparations."
+            ),
+            'esports': (
+                "Esports contract moves without news may reflect roster information "
+                "or scrim results shared within team communities before public announcement."
+            ),
+        }.get(category, (
+            "Unexplained moves on prediction markets can reflect private information, "
+            "early positioning, or off-channel intelligence not yet visible in news."
+        ))
+
+        sports_note = ''
+        if sports_context == 'large_ingame_move':
+            sports_note = ' Note: this contract is moving during a live event — a goal, red card, or key moment may explain the move even without a news article.'
+        elif sports_context == 'pre_game_move':
+            sports_note = ' This is a pre-game move, suggesting the information may relate to team selection or player availability.'
+
+        prompt = (
+            "You are a prediction market analyst. Write exactly 2-3 sentences "
+            "about this unusual price movement where NO public news was found. "
+            "Be specific and analytical. Do not use vague language. "
+            "Do not start with 'I' or repeat the question back.\n\n"
+            f"CONTRACT: {question}\n"
+            f"EVENT: {event_title}\n"
+            f"CATEGORY: {category}\n"
+            f"PRICE MOVE: {prev_pct}% → {curr_pct}% ({dir_word}, {move_pct} points)\n\n"
+            f"CONTEXT: {category_context}{sports_note}\n\n"
+            "Write 2-3 sentences: first describe the move plainly and note there is "
+            "no public news to explain it, then give a specific and plausible reason "
+            "why informed capital might be moving in this direction based on the "
+            "contract topic and category. Be concrete, not generic."
+        )
+
+    try:
+        response = _requests.post(
+            GROQ_URL,
+            headers={
+                'Authorization': f'Bearer {GROQ_API_KEY}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': GROQ_MODEL,
+                'messages': [{'role': 'user', 'content': prompt}],
+                'max_tokens': 150,
+                'temperature': 0.3,   # slight creativity — avoids robotic output
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        summary = (
+            response.json()['choices'][0]['message']['content']
+            .strip()
+        )
+        return summary if summary else None
+    except Exception as e:
+        print(f"  Summary generation error: {e}")
+        return None

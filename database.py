@@ -123,6 +123,7 @@ def setup_db():
                 related_contracts    TEXT DEFAULT '[]',
                 news_timing          TEXT DEFAULT 'unknown',
                 market_url           TEXT,
+                ai_summary           TEXT,
                 -- Sports-specific fields
                 is_terminal          INTEGER DEFAULT 0,
                 mins_elapsed         REAL DEFAULT 0
@@ -134,6 +135,7 @@ def setup_db():
         for col, definition in [
             ('is_terminal', 'INTEGER DEFAULT 0'),
             ('mins_elapsed', 'REAL DEFAULT 0'),
+            ('ai_summary', 'TEXT'),
         ]:
             try:
                 conn.run(
@@ -232,14 +234,14 @@ def save_signal(signal_data):
                 volume, score, related_same_event, related_cross_event,
                 news_vacuum, news_headline, news_source, news_url,
                 detected_at, category, related_contracts, news_timing,
-                market_url, is_terminal, mins_elapsed
+                market_url, ai_summary, is_terminal, mins_elapsed
             ) VALUES (
                 :event_id, :event_title, :question, :platform,
                 :prev_odds, :current_odds, :price_move, :direction,
                 :volume, :score, :related_same_event, :related_cross_event,
                 :news_vacuum, :news_headline, :news_source, :news_url,
                 :detected_at, :category, :related_contracts, :news_timing,
-                :market_url, :is_terminal, :mins_elapsed
+                :market_url, :ai_summary, :is_terminal, :mins_elapsed
             )
             RETURNING id
         ''',
@@ -264,6 +266,7 @@ def save_signal(signal_data):
             related_contracts=signal_data.get('related_contracts', '[]'),
             news_timing=signal_data.get('news_timing', 'unknown'),
             market_url=signal_data.get('market_url'),
+            ai_summary=signal_data.get('ai_summary'),
             is_terminal=1 if signal_data.get('is_terminal', False) else 0,
             mins_elapsed=signal_data.get('mins_elapsed', 0),
         )
