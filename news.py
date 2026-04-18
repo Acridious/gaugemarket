@@ -1,3 +1,4 @@
+import os
 import requests
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -195,6 +196,54 @@ def fetch_rss(url, source_name):
         return []
 
 def get_event_category(event_title, question):
+    """
+    Classify the signal category using Groq Llama 3.1 8B.
+    Falls back to keyword matching if Groq is unavailable.
+    """
+    groq_key = os.environ.get('GROQ_API_KEY', '')
+
+    if groq_key:
+        try:
+            prompt = (
+                f"Classify this prediction market question into exactly one category.\n\n"
+                f"Event: "{event_title}"\n"
+                f"Question: "{question}"\n\n"
+                f"Categories:\n"
+                f"- sports: any sport, athlete, team, match, tournament, score, stats\n"
+                f"- esports: gaming tournaments, video game competitions\n"
+                f"- political: elections, politicians, government policy, voting\n"
+                f"- macro: economy, interest rates, inflation, GDP, central banks, jobs\n"
+                f"- geopolitical: wars, international relations, sanctions, diplomacy, military\n"
+                f"- commodities: oil, gold, gas, metals, agricultural products\n"
+                f"- crypto: bitcoin, ethereum, cryptocurrency, blockchain, DeFi\n"
+                f"- other: anything that doesn't clearly fit above\n\n"
+                f"Reply with only the category name, nothing else."
+            )
+            response = requests.post(
+                'https://api.groq.com/openai/v1/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {groq_key}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': 'llama-3.1-8b-instant',
+                    'messages': [{'role': 'user', 'content': prompt}],
+                    'max_tokens': 10,
+                    'temperature': 0
+                },
+                timeout=8
+            )
+            response.raise_for_status()
+            result = (response.json()['choices'][0]['message']['content']
+                      .strip().lower().split()[0])
+            valid = {'sports', 'esports', 'political', 'macro',
+                     'geopolitical', 'commodities', 'crypto', 'other'}
+            if result in valid:
+                return result
+        except Exception as e:
+            print(f"Groq category error: {e} — falling back to keywords")
+
+    # Fallback: keyword matching
     text = f"{event_title} {question}".lower()
     for category, keywords in CATEGORY_KEYWORDS.items():
         if any(kw in text for kw in keywords):
@@ -255,6 +304,47 @@ def extract_search_terms(event_title, question):
 
     return list(set(terms))
 
+def is_article_relevant(article_headline, event_title, question):
+    """
+    Ask Groq if the article is actually about this specific contract.
+    Prevents Manchester City articles showing up for Kyoto Sanga matches.
+    Returns True if relevant, False if not.
+    """
+    groq_key = os.environ.get('GROQ_API_KEY', '')
+    if not groq_key:
+        return True  # no key — assume relevant
+
+    try:
+        prompt = (
+            f"Is this news article relevant to this prediction market contract?\n\n"
+            f"Contract: "{question}" (event: "{event_title}")\n"
+            f"Article headline: "{article_headline}"\n\n"
+            f"Answer YES only if the article is specifically about the same "
+            f"event, team, player, or topic as the contract.\n"
+            f"Answer NO if it's a different event, team, or only tangentially related.\n"
+            f"Answer only YES or NO."
+        )
+        response = requests.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {groq_key}',
+                'Content-Type': 'application/json'
+            },
+            json={
+                'model': 'llama-3.1-8b-instant',
+                'messages': [{'role': 'user', 'content': prompt}],
+                'max_tokens': 5,
+                'temperature': 0
+            },
+            timeout=8
+        )
+        response.raise_for_status()
+        answer = (response.json()['choices'][0]['message']['content']
+                  .strip().upper())
+        return answer.startswith('YES')
+    except Exception:
+        return True  # on error — assume relevant
+
 def check_news_vacuum(event_title, question, category='other',
                       signal_detected_at=None):
     search_terms = extract_search_terms(event_title, question)
@@ -286,18 +376,29 @@ def check_news_vacuum(event_title, question, category='other',
         for entry in entries[:25]:
             title = entry.get('title', '').lower()
             desc = entry.get('description', '').lower()
-            if any(term in title or term in desc for term in search_terms):
-                pub_date_str = entry.get('pubDate', '')
-                pub_date = parse_article_date(pub_date_str)
-                timing = classify_article_timing(pub_date, detected_at)
+            if not any(term in title or term in desc
+                       for term in search_terms):
+                continue
 
-                articles_found.append({
-                    'headline': entry.get('title', ''),
-                    'source': source_name,
-                    'url': entry.get('link', ''),
-                    'published': pub_date_str,
-                    'timing': timing
-                })
+            headline = entry.get('title', '')
+
+            # Ask Groq if this article is actually about this contract
+            # Prevents Man City news appearing for Kyoto Sanga matches
+            if not is_article_relevant(headline, event_title, question):
+                print(f"  Groq rejected irrelevant article: {headline[:60]}")
+                continue
+
+            pub_date_str = entry.get('pubDate', '')
+            pub_date = parse_article_date(pub_date_str)
+            timing = classify_article_timing(pub_date, detected_at)
+
+            articles_found.append({
+                'headline': headline,
+                'source': source_name,
+                'url': entry.get('link', ''),
+                'published': pub_date_str,
+                'timing': timing
+            })
 
         if articles_found:
             break
@@ -309,11 +410,11 @@ def check_news_vacuum(event_title, question, category='other',
     if articles_found:
         timings = [a['timing'] for a in articles_found]
         if 'after' in timings:
-            overall_timing = 'after'       # article broke after bet — real signal
+            overall_timing = 'after'
         elif 'simultaneous' in timings:
             overall_timing = 'simultaneous'
         elif 'before' in timings:
-            overall_timing = 'before'      # news existed before bet — explains move
+            overall_timing = 'before'
 
     return {
         'vacuum': len(articles_found) == 0,

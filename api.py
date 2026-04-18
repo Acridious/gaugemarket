@@ -66,31 +66,113 @@ def enrich_signal(s):
 
 def deduplicate_signals(signals):
     """
-    One card per contract — always shows the most recent move.
-    If direction flips from a previous signal, flags as a reversal.
+    Two levels of deduplication:
 
-    Volatile markets can generate many signals on the same contract.
-    Showing all of them clutters the feed. Most recent is most relevant.
+    1. Same question — keep most recent move only (reversal detection)
+    2. Same event_id — keep highest scoring signal as the primary card,
+       merge others as related contracts so the whole game appears once.
+
+    This fixes the Kyoto Sanga / Cerezo Osaka problem where two signals
+    from the same match appear as separate cards.
     """
-    seen = {}
+    # Step 1 — deduplicate by question (same contract, different polls)
+    by_question = {}
     for s in signals:
         key = s['question'].strip().lower()
-        if key not in seen:
-            seen[key] = s
+        if key not in by_question:
+            by_question[key] = s
         else:
-            existing = seen[key]
-            # Keep most recent
+            existing = by_question[key]
             if s['detected_at'] > existing['detected_at']:
-                # Flag reversal if direction flipped
                 if existing.get('direction') != s.get('direction'):
                     s['is_reversal'] = True
                     s['reversal_from'] = existing['direction']
                     s['reversal_prev_move'] = round(
                         existing.get('price_move', 0) * 100
                     )
-                seen[key] = s
+                by_question[key] = s
 
-    result = list(seen.values())
+    deduped = list(by_question.values())
+
+    # Step 2 — deduplicate by event_id (same game, different contracts)
+    # Keep the highest scoring signal as primary, merge others as related
+    by_event = {}
+    for s in deduped:
+        event_id = s.get('event_id', '')
+        if not event_id or event_id == 'unknown':
+            # No event_id — keep as standalone
+            by_event[s['question']] = s
+            continue
+
+        if event_id not in by_event:
+            by_event[event_id] = s
+        else:
+            existing = by_event[event_id]
+            # If new signal scores higher — make it primary
+            # and add existing as related contract
+            if s['score'] > existing['score']:
+                # Merge existing into new signal's related contracts
+                try:
+                    existing_rc = json.loads(
+                        existing.get('related_contracts', '[]')
+                        if isinstance(existing.get('related_contracts'), str)
+                        else '[]'
+                    )
+                except Exception:
+                    existing_rc = []
+
+                existing_rc.insert(0, {
+                    'question': existing['question'],
+                    'odds': existing['current_odds'],
+                    'prev_odds': existing['prev_odds'],
+                    'platform': existing['platform'],
+                    'event_title': existing.get('event_title', ''),
+                    'type': 'same_event'
+                })
+
+                try:
+                    new_rc = json.loads(
+                        s.get('related_contracts', '[]')
+                        if isinstance(s.get('related_contracts'), str)
+                        else '[]'
+                    )
+                except Exception:
+                    new_rc = []
+
+                # Merge without duplicates
+                seen_q = {c['question'] for c in new_rc}
+                for c in existing_rc:
+                    if c['question'] not in seen_q:
+                        new_rc.append(c)
+
+                s['related_contracts'] = new_rc
+                by_event[event_id] = s
+            else:
+                # Keep existing as primary, add new as related
+                try:
+                    rc = json.loads(
+                        existing.get('related_contracts', '[]')
+                        if isinstance(existing.get('related_contracts'), str)
+                        else '[]'
+                    )
+                except Exception:
+                    rc = []
+
+                already = any(
+                    c.get('question') == s['question'] for c in rc
+                )
+                if not already:
+                    rc.append({
+                        'question': s['question'],
+                        'odds': s['current_odds'],
+                        'prev_odds': s['prev_odds'],
+                        'platform': s['platform'],
+                        'event_title': s.get('event_title', ''),
+                        'type': 'same_event'
+                    })
+                existing['related_contracts'] = rc
+
+    result = list(by_event.values())
     result.sort(key=lambda x: x['detected_at'], reverse=True)
     return result
 
