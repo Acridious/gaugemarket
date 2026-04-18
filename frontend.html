@@ -64,8 +64,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .signal-stack{display:flex;flex-direction:column;gap:12px;}
 
 /* Intelligence cards — full width, 2-col grid on wide screens */
-.intel-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
-@media(max-width:780px){.intel-grid{grid-template-columns:1fr;}}
+.intel-grid{display:flex;flex-direction:column;gap:12px;}
 
 .card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
 .card.no_news  {border-left:4px solid var(--purple);}
@@ -505,7 +504,7 @@ function renderIntel() {
   document.getElementById('tab-count-intel').textContent=sigs.length
   el.innerHTML=sigs.length
     ? sigs.map(renderIntelCard).join('')
-    : `<div class="empty" style="grid-column:1/-1"><strong>No signals yet</strong><p>Nothing flagged in this category. The poller runs every 5 minutes.</p></div>`
+    : `<div class="empty"><strong>No signals yet</strong><p>Nothing flagged in this category. The poller runs every 5 minutes.</p></div>`
 }
 
 function renderSports() {

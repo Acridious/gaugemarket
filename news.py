@@ -195,47 +195,172 @@ def fetch_rss(url, source_name):
         print(f"RSS fetch error ({url}): {e}")
         return []
 
+# Sports-specific signals in contract text — used as a fast pre-check before Groq.
+# The goal is to catch ANY contract that is about a sporting event, match, or
+# player performance, regardless of whether we recognise the team or player name.
+# Patterns are chosen because they ONLY appear in sports/esports markets.
+_SPORTS_SIGNALS = [
+    # Bet structure keywords — universal across all sports markets
+    'o/u', 'over/under', 'over under',
+    'moneyline', 'money line',
+    'handicap', 'spread',
+    'first half', 'second half', 'full time', 'half time', 'halftime',
+    'match winner', 'game winner', 'series winner', 'set winner',
+    'win the match', 'win the game', 'win the series', 'win the set',
+    'to win', ' vs ', ' v ',                 # "Team A vs Team B"
+
+    # Stat prop keywords — player performance bets
+    'points o/u', 'assists o/u', 'rebounds o/u', 'goals o/u',
+    'strikeouts o/u', 'yards o/u', 'kills o/u',
+    'total points', 'total goals', 'total runs', 'total assists',
+
+    # Explicit score/result language
+    'correct score', 'both teams to score', 'btts',
+    'clean sheet', 'first scorer', 'last scorer', 'anytime scorer',
+    'double chance', 'draw no bet',
+    'set 1', 'set 2', 'set 3', 'set 4', 'set 5',   # tennis sets
+    'map 1', 'map 2', 'map 3', 'map 4', 'map 5',   # esports maps
+    'map handicap', 'map winner',
+    'quarter 1', 'quarter 2', 'quarter 3', 'quarter 4',
+    'innings', 'wicket', 'century',                 # cricket
+    'round winner', 'fight winner', 'ko win', 'tko',# combat sports
+    'lap ', 'qualifying', 'pole position',           # motorsport
+
+    # League / competition names
+    'nba', 'nfl', 'mlb', 'nhl', 'nba 2k',
+    'epl', 'mls', 'ufc', 'pfl', 'bellator',
+    'premier league', 'la liga', 'serie a', 'bundesliga', 'ligue 1',
+    'eredivisie', 'süper lig', 'super lig',          # Turkish football
+    'chinese super league', 'j-league', 'k-league',  # Asian football
+    'a-league', 'mls cup',
+    'champions league', 'europa league', 'conference league',
+    'world cup', 'euros', 'copa america', 'copa del rey', 'fa cup',
+    'carabao cup', 'dfb-pokal',
+    'pga', 'lpga', 'masters', 'the open', 'us open',
+    'wimbledon', 'roland garros', 'australian open',  # tennis slams
+    'atp', 'wta', 'itf',
+    'tour de france', "giro d'italia", 'vuelta',     # cycling
+    'formula 1', 'formula one', 'f1 ', 'motogp', 'nascar',
+    'wnba', 'ncaa', 'ipl', 'big bash',               # more leagues
+
+    # Common sports result format: "Team A to beat Team B"
+    ' to beat ', ' beats ', ' beat ',
+    ' defeats ', ' def ',
+
+    # Player stats that only appear in sports props
+    'rebounds', 'assists', 'strikeouts', 'touchdowns',
+    'rushing yards', 'passing yards', 'receiving yards',
+    'home runs', 'batting average',
+]
+
+def _fast_sports_check(event_title, question):
+    """
+    Returns True if the contract is obviously a sports market.
+    Runs before Groq to catch markets that keyword-match sport patterns
+    regardless of whether we recognise the team/player name.
+    E.g. "Fatih Karagümrük SK vs. Eyüpspor: O/U 2.5" catches on 'o/u' and 'vs '.
+    """
+    text = f"{event_title} {question}".lower()
+    return any(sig in text for sig in _SPORTS_SIGNALS)
+
+def _fast_esports_check(event_title, question):
+    """
+    Esports check runs first — before the general sports check —
+    so "Map Handicap: EDG vs JD Gaming" gets esports, not sports.
+    """
+    text = f"{event_title} {question}".lower()
+    esports_signals = [
+        # Game titles
+        'counter-strike', 'cs2', 'csgo', 'cs:go',
+        'valorant', 'league of legends', 'lol ',
+        'dota 2', 'dota2',
+        'overwatch', 'rocket league',
+        'starcraft', 'warcraft',
+        'call of duty', 'cod ', 'apex legends',
+        'rainbow six', 'r6 ',
+        'mobile legends', 'wild rift', 'arena of valor',
+        # Teams / orgs
+        'g2 esports', ' g2 ',
+        'navi ', 'natus vincere',
+        'faze clan', 'faze ',
+        'team liquid', 'team vitality', 'team secret',
+        'fnatic', 'astralis', 'cloud9', 'c9 ',
+        'virtus.pro', 'virtus pro',
+        'evil geniuses', ' eg ',
+        'edg ', 'jd gaming', 'jdg',        # LPL teams (EDG triggered in screenshot)
+        'gen.g', 'gen g', 't1 ', 'faker',
+        'sentinels', 'nrg ', '100 thieves',
+        # Tournament names
+        'iem ', 'esl one', 'blast premier', 'major tournament',
+        'worlds ', 'msi ', 'lck ', 'lcs ', 'lec ', 'lpl ',
+        # Esports-specific bet types
+        'map winner', 'map handicap',
+        'round winner', 'kill race', 'first blood',
+        'first tower', 'first dragon', 'first baron',
+    ]
+    return any(sig in text for sig in esports_signals)
+
+
 def get_event_category(event_title, question):
     """
-    Classify the signal category using Groq Llama 3.1 8B.
-    Falls back to keyword matching if Groq is unavailable.
-    """
-    groq_key = os.environ.get('GROQ_API_KEY', '')
+    Classify the signal category.
 
-    if groq_key:
+    Order of operations:
+    1. Fast deterministic pre-checks for sports/esports — these are
+       unambiguous and a small LLM reliably gets them wrong on short
+       player prop questions (e.g. "Anthony Edwards: Points O/U 27.5"
+       has no obvious sport keyword but is clearly an NBA prop).
+    2. Groq classification for everything else (macro, geo, political,
+       crypto, commodities) where context matters.
+    3. Keyword fallback if Groq is unavailable or returns an invalid value.
+    """
+    # Step 1: deterministic sports/esports check — beats Groq for props
+    if _fast_esports_check(event_title, question):
+        return 'esports'
+    if _fast_sports_check(event_title, question):
+        return 'sports'
+
+    # Step 2: Groq for non-obvious categories
+    from groq_client import groq_available, GROQ_API_KEY, GROQ_URL, GROQ_MODEL
+    import requests as _req
+
+    if groq_available():
         try:
             prompt = (
-                "Classify this prediction market question into exactly one category.\n\n"
-                + f"Event: \"{event_title}\"\n"
-                + f"Question: \"{question}\"\n\n"
-                + "Categories:\n"
-                + "- sports: any sport, athlete, team, match, tournament, score, stats\n"
-                + "- esports: gaming tournaments, video game competitions\n"
-                + "- political: elections, politicians, government policy, voting\n"
-                + "- macro: economy, interest rates, inflation, GDP, central banks, jobs\n"
-                + "- geopolitical: wars, international relations, sanctions, diplomacy, military\n"
-                + "- commodities: oil, gold, gas, metals, agricultural products\n"
-                + "- crypto: bitcoin, ethereum, cryptocurrency, blockchain, DeFi\n"
-                + "- other: anything that does not clearly fit above\n\n"
-                + "Reply with only the category name, nothing else."
+                "Classify this prediction market contract into exactly one category.\n\n"
+                f'Event: "{event_title}"\n'
+                f'Question: "{question}"\n\n'
+                "Categories and what they cover:\n"
+                "- political: elections, politicians, heads of state, government decisions, voting, legislation\n"
+                "- macro: economy, interest rates, inflation, GDP, central banks, jobs data, recession\n"
+                "- geopolitical: wars, invasions, international conflicts, sanctions, diplomacy, military action\n"
+                "- commodities: oil, gold, gas, metals, agricultural products, OPEC\n"
+                "- crypto: bitcoin, ethereum, any cryptocurrency, blockchain, DeFi, NFT\n"
+                "- other: entertainment, awards, weather, science, anything else\n\n"
+                "NOTE: If the contract involves any athlete, team, sport, match, "
+                "tournament, player stats, or game result — answer 'sports'. "
+                "This includes player prop bets even if the sport is not named.\n\n"
+                "Reply with only the single category word, nothing else."
             )
-            response = requests.post(
-                'https://api.groq.com/openai/v1/chat/completions',
+            response = _req.post(
+                GROQ_URL,
                 headers={
-                    'Authorization': f'Bearer {groq_key}',
-                    'Content-Type': 'application/json'
+                    'Authorization': f'Bearer {GROQ_API_KEY}',
+                    'Content-Type': 'application/json',
                 },
                 json={
-                    'model': 'llama-3.1-8b-instant',
+                    'model': GROQ_MODEL,
                     'messages': [{'role': 'user', 'content': prompt}],
                     'max_tokens': 10,
-                    'temperature': 0
+                    'temperature': 0,
                 },
-                timeout=8
+                timeout=8,
             )
             response.raise_for_status()
-            result = (response.json()['choices'][0]['message']['content']
-                      .strip().lower().split()[0])
+            result = (
+                response.json()['choices'][0]['message']['content']
+                .strip().lower().split()[0]
+            )
             valid = {'sports', 'esports', 'political', 'macro',
                      'geopolitical', 'commodities', 'crypto', 'other'}
             if result in valid:
@@ -243,7 +368,7 @@ def get_event_category(event_title, question):
         except Exception as e:
             print(f"Groq category error: {e} — falling back to keywords")
 
-    # Fallback: keyword matching
+    # Step 3: keyword fallback
     text = f"{event_title} {question}".lower()
     for category, keywords in CATEGORY_KEYWORDS.items():
         if any(kw in text for kw in keywords):
