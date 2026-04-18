@@ -365,18 +365,38 @@
     return '$' + v.toFixed(0)
   }
 
+  async function fetchWithRetry(url, retries = 3, delayMs = 2000) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 8000)
+        const res = await fetch(url, { signal: controller.signal })
+        clearTimeout(timeout)
+        if (!res.ok) throw new Error('HTTP ' + res.status)
+        return await res.json()
+      } catch(e) {
+        if (i < retries - 1) {
+          await new Promise(r => setTimeout(r, delayMs))
+        } else {
+          throw e
+        }
+      }
+    }
+  }
+
   async function loadStats() {
     try {
-      const res = await fetch(`${API}/stats`)
-      const data = await res.json()
+      const data = await fetchWithRetry(`${API}/stats`)
       document.getElementById('stat-volume').textContent = formatVolume(data.total_volume_monitored)
       document.getElementById('stat-markets').textContent = (data.market_count ?? 0).toLocaleString()
       document.getElementById('stat-total').textContent = data.total ?? 0
       document.getElementById('stat-today').textContent = data.today ?? 0
       document.getElementById('stat-high').innerHTML = `<span>${data.high_confidence ?? 0}</span>`
       document.getElementById('live-status').textContent = 'Live'
+      document.querySelector('.live-dot').style.background = 'var(--green)'
     } catch(e) {
       document.getElementById('live-status').textContent = 'Offline'
+      document.querySelector('.live-dot').style.background = 'var(--red)'
     }
   }
 
@@ -389,8 +409,7 @@
         ? `${API}/feed`
         : `${API}/feed?category=${currentCategory}`
 
-      const res = await fetch(url)
-      const data = await res.json()
+      const data = await fetchWithRetry(url)
 
       document.getElementById('error-box').style.display = 'none'
 
@@ -419,6 +438,10 @@
   async function loadAll() {
     await Promise.all([loadStats(), loadFeed()])
   }
+
+  // Auto-refresh every 5 mins — keeps Railway web service warm
+  // and shows fresh signals without manual refresh
+  setInterval(loadAll, 5 * 60 * 1000)
 
   // Load on startup
   loadAll()
