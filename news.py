@@ -304,25 +304,34 @@ def extract_search_terms(event_title, question):
 
     return list(set(terms))
 
-def is_article_relevant(article_headline, event_title, question):
+def is_article_relevant(article_headline, event_title, question, article_description=''):
     """
-    Ask Groq if the article is actually about this specific contract.
-    Prevents Manchester City articles showing up for Kyoto Sanga matches.
-    Returns True if relevant, False if not.
+    Ask Groq if a news article is genuinely about this specific contract.
+
+    Uses a strict prompt with explicit examples of YES and NO cases.
+    Defaults to False on error — better to show no news than wrong news.
     """
     groq_key = os.environ.get('GROQ_API_KEY', '')
     if not groq_key:
-        return True  # no key — assume relevant
+        return False  # no key — don't show potentially wrong articles
 
     try:
         prompt = (
-            "Is this news article relevant to this prediction market contract?\n\n"
-            + f"Contract: \"{question}\" (event: \"{event_title}\")\n"
-            + f"Article headline: \"{article_headline}\"\n\n"
-            + "Answer YES only if the article is specifically about the same "
-            + "event, team, player, or topic as the contract.\n"
-            + "Answer NO if it is a different event, team, or only tangentially related.\n"
-            + "Answer only YES or NO."
+            "You are checking if a news article is directly relevant to a "
+            "prediction market contract. Be strict — only say YES if the "
+            "article is specifically and directly about the exact same topic.\n\n"
+            + f"PREDICTION MARKET CONTRACT:\n"
+            + f"Event: {event_title}\n"
+            + f"Question: {question}\n\n"
+            + f"NEWS ARTICLE HEADLINE:\n{article_headline}\n"
+            + (f"ARTICLE CONTEXT:\n{article_description[:400]}\n\n" if article_description else "\n")
+            + "Rules:\n"
+            + "- YES: article is directly about the same specific event, location, person, or team\n"
+            + "- NO: article is about a different event, different country, different team\n"
+            + "- NO: article is only loosely related by topic (e.g. weather article about wrong city)\n"
+            + "- NO: article mentions a related concept but not this specific contract\n"
+            + "- When in doubt, answer NO\n\n"
+            + "Answer with only YES or NO, nothing else."
         )
         response = requests.post(
             'https://api.groq.com/openai/v1/chat/completions',
@@ -341,9 +350,13 @@ def is_article_relevant(article_headline, event_title, question):
         response.raise_for_status()
         answer = (response.json()['choices'][0]['message']['content']
                   .strip().upper())
-        return answer.startswith('YES')
-    except Exception:
-        return True  # on error — assume relevant
+        is_relevant = answer.startswith('YES')
+        if not is_relevant:
+            print(f"  Groq: irrelevant — {article_headline[:50]}")
+        return is_relevant
+    except Exception as e:
+        print(f"  Groq relevance error: {e}")
+        return False  # on error — don't show potentially wrong articles
 
 def check_news_vacuum(event_title, question, category='other',
                       signal_detected_at=None):
@@ -376,16 +389,33 @@ def check_news_vacuum(event_title, question, category='other',
         for entry in entries[:25]:
             title = entry.get('title', '').lower()
             desc = entry.get('description', '').lower()
-            if not any(term in title or term in desc
-                       for term in search_terms):
+            combined = title + ' ' + desc
+
+            # Require the PRIMARY search term (first one) to match
+            # AND at least one secondary term — reduces false matches
+            primary = search_terms[0] if search_terms else ''
+            secondary = search_terms[1:] if len(search_terms) > 1 else []
+
+            primary_matches = primary and primary in combined
+            secondary_matches = not secondary or any(
+                t in combined for t in secondary
+            )
+
+            # For single search term — must appear in title (not just description)
+            if not secondary:
+                if primary not in title:
+                    continue
+            elif not (primary_matches and secondary_matches):
                 continue
 
             headline = entry.get('title', '')
+            description = entry.get('description', '')
 
-            # Ask Groq if this article is actually about this contract
-            # Prevents Man City news appearing for Kyoto Sanga matches
-            if not is_article_relevant(headline, event_title, question):
-                print(f"  Groq rejected irrelevant article: {headline[:60]}")
+            # Final gate — ask Groq with headline + description context
+            # Description gives Groq enough to disambiguate e.g.
+            # "atmosphere" meaning weather vs political mood
+            if not is_article_relevant(headline, event_title, question, description):
+                print(f"  Groq rejected: {headline[:60]}")
                 continue
 
             pub_date_str = entry.get('pubDate', '')
