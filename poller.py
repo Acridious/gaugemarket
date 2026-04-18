@@ -110,20 +110,142 @@ def process_kalshi_markets(markets):
     
     return processed
 
+# Sports team name lookup — maps short names to full names and aliases
+# Used to find the game identifier across differently structured contracts
+TEAM_ALIASES = {
+    'warriors': ['warriors', 'golden state', 'gsw'],
+    'suns': ['suns', 'phoenix'],
+    'lakers': ['lakers', 'los angeles lakers', 'lal'],
+    'celtics': ['celtics', 'boston'],
+    'nuggets': ['nuggets', 'denver'],
+    'heat': ['heat', 'miami'],
+    'bucks': ['bucks', 'milwaukee'],
+    'nets': ['nets', 'brooklyn'],
+    'knicks': ['knicks', 'new york'],
+    'sixers': ['sixers', '76ers', 'philadelphia'],
+    'bulls': ['bulls', 'chicago'],
+    'cavaliers': ['cavaliers', 'cavs', 'cleveland'],
+    'hawks': ['hawks', 'atlanta'],
+    'pacers': ['pacers', 'indiana'],
+    'magic': ['magic', 'orlando'],
+    'raptors': ['raptors', 'toronto'],
+    'pistons': ['pistons', 'detroit'],
+    'hornets': ['hornets', 'charlotte'],
+    'wizards': ['wizards', 'washington'],
+    'spurs': ['spurs', 'san antonio'],
+    'mavs': ['mavs', 'mavericks', 'dallas'],
+    'rockets': ['rockets', 'houston'],
+    'grizzlies': ['grizzlies', 'memphis'],
+    'pelicans': ['pelicans', 'new orleans'],
+    'thunder': ['thunder', 'oklahoma city', 'okc'],
+    'jazz': ['jazz', 'utah'],
+    'clippers': ['clippers', 'la clippers'],
+    'kings': ['kings', 'sacramento'],
+    'trailblazers': ['trailblazers', 'blazers', 'portland'],
+    'timberwolves': ['timberwolves', 'wolves', 'minnesota'],
+    # NFL
+    'chiefs': ['chiefs', 'kansas city'],
+    'eagles': ['eagles', 'philadelphia'],
+    'cowboys': ['cowboys', 'dallas'],
+    'patriots': ['patriots', 'new england'],
+    'packers': ['packers', 'green bay'],
+    '49ers': ['49ers', 'san francisco', 'niners'],
+    'ravens': ['ravens', 'baltimore'],
+    'bills': ['bills', 'buffalo'],
+    # Soccer
+    'man city': ['man city', 'manchester city'],
+    'man utd': ['man utd', 'manchester united'],
+    'arsenal': ['arsenal'],
+    'liverpool': ['liverpool'],
+    'chelsea': ['chelsea'],
+    'real madrid': ['real madrid'],
+    'barcelona': ['barcelona', 'barca'],
+}
+
+def extract_teams(text):
+    """Extract team names from a contract title or question."""
+    text_lower = text.lower()
+    found = []
+    for team, aliases in TEAM_ALIASES.items():
+        if any(alias in text_lower for alias in aliases):
+            found.append(team)
+    return set(found)
+
+def get_game_key(market):
+    """
+    Extract a game-level key from a market.
+    Groups all contracts about the same game regardless of
+    how Polymarket structures the event_id.
+
+    Priority:
+    1. Same event_id (Polymarket's own grouping)
+    2. Same team pair extracted from title/question
+    """
+    teams = extract_teams(
+        f"{market.get('event_title', '')} {market.get('question', '')}"
+    )
+    if len(teams) >= 2:
+        # Sort so Warriors+Suns == Suns+Warriors
+        return 'game_' + '_'.join(sorted(teams))
+    elif len(teams) == 1:
+        # Single team — e.g. player props — use team + event_id
+        return f"game_{list(teams)[0]}_{market['event_id']}"
+    return market['event_id']
+
 def find_related_markets(signal_market, all_markets):
     """
-    Same-event grouping uses Polymarket's own event structure — free and accurate.
-    Cross-event grouping is handled by the AI grouper (grouper.py) every 30 mins.
+    Game-level grouping — groups ALL contracts about the same game.
+
+    Goes beyond Polymarket's event_id which sometimes splits
+    props, spreads and totals into different events even for
+    the same game.
+
+    1. Same event_id → always same group
+    2. Same team pair extracted from title/question → same group
     """
     same_event = []
+    signal_game_key = get_game_key(signal_market)
+    signal_teams = extract_teams(
+        f"{signal_market.get('event_title', '')} "
+        f"{signal_market.get('question', '')}"
+    )
 
     for market in all_markets:
         if market['market_id'] == signal_market['market_id']:
             continue
+
+        # Same Polymarket event_id — definitely related
         if market['event_id'] == signal_market['event_id']:
             same_event.append(market)
+            continue
 
-    return same_event, []  # cross_event left empty — AI grouper handles this
+        # Same game key from team extraction
+        market_game_key = get_game_key(market)
+        if (market_game_key == signal_game_key and
+                signal_game_key != signal_market['event_id']):
+            same_event.append(market)
+            continue
+
+        # Overlap of 2+ teams — catches player props on same game
+        market_teams = extract_teams(
+            f"{market.get('event_title', '')} "
+            f"{market.get('question', '')}"
+        )
+        if len(signal_teams) >= 1 and len(market_teams) >= 1:
+            if len(signal_teams & market_teams) >= 1:
+                # At least one team in common — likely same game
+                # Only if both are sports category
+                same_event.append(market)
+
+    # Deduplicate
+    seen = set()
+    deduped = []
+    for m in same_event:
+        if m['market_id'] not in seen:
+            seen.add(m['market_id'])
+            deduped.append(m)
+
+    return deduped, []  # cross_event left empty — AI grouper handles this
 
 def score_signal(price_move, mins_elapsed, 
                  same_event_count, cross_event_count,
