@@ -409,21 +409,34 @@ def cleanup_old_data():
             pass
 
 def get_signal_stats():
+    from datetime import timedelta
     conn = get_connection()
+
+    # detected_at stored as TEXT (ISO format) — compare as strings
+    # today_start = "2026-04-18T00:00:00" — catches all signals from today
+    today_start = datetime.now().replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+
     total = conn.run("SELECT COUNT(*) FROM signals")[0][0]
-    today = conn.run('''
-        SELECT COUNT(*) FROM signals 
-        WHERE detected_at::date = CURRENT_DATE
-    ''')[0][0]
-    high_score = conn.run('''
-        SELECT COUNT(*) FROM signals 
-        WHERE score >= 70 AND detected_at::date = CURRENT_DATE
-    ''')[0][0]
-    avg_result = conn.run('''
-        SELECT AVG(score) FROM signals
-        WHERE detected_at::date = CURRENT_DATE
-    ''')
+
+    today = conn.run(
+        "SELECT COUNT(*) FROM signals WHERE detected_at >= :today_start",
+        today_start=today_start
+    )[0][0]
+
+    high_score = conn.run(
+        "SELECT COUNT(*) FROM signals WHERE score >= 70 "
+        "AND detected_at >= :today_start",
+        today_start=today_start
+    )[0][0]
+
+    avg_result = conn.run(
+        "SELECT AVG(score) FROM signals WHERE detected_at >= :today_start",
+        today_start=today_start
+    )
     avg_score = avg_result[0][0] if avg_result else 0
+
     conn.close()
     return {
         'total': total,
