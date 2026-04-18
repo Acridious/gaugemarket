@@ -244,7 +244,10 @@ _SPORTS_SIGNALS = [
     'wnba', 'ncaa', 'ipl', 'big bash',               # more leagues
 
     'odd/even', 'odd even',  # prop bet format used in both sports and esports
-    # Common sports result format: "Team A to beat Team B"
+    # Match format variants — "Team A vs Team B", "Team A vs. Team B", "Team A v Team B"
+    ' vs ', ' vs. ', ' vs.\n', '(vs.', '(vs ',
+    ' v ', ' v. ',
+    # Common sports result format
     ' to beat ', ' beats ', ' beat ',
     ' defeats ', ' def ',
 
