@@ -88,32 +88,31 @@ def fetch_polymarket_events():
 
 
 # Tags that indicate contracts with no information edge — skip entirely.
-# Weather moves on public forecast data. Entertainment is pure opinion.
-# Science/space moves on public announcements. None have an insider trading angle.
+# Weather moves on public forecast data. Science/space moves on public announcements.
+# Reality TV is pure opinion with no tradeable edge.
+#
+# NOTE: Awards (Oscars, Grammys, BAFTAs etc.) are intentionally NOT skipped —
+# academy members and industry insiders have been documented trading on early
+# knowledge of results, making these legitimate insider trading signals.
 _POLY_SKIP_TAGS = {
     'weather', 'climate',
-    'entertainment', 'awards', 'oscars', 'emmys', 'grammys', 'bafta',
-    'tv', 'television', 'film', 'movies', 'music', 'celebrity',
     'science', 'space', 'nasa', 'astronomy',
     'reality tv', 'reality show',
 }
 
 # Fast keyword check for skip categories — used when tags aren't conclusive
 _SKIP_QUESTION_PATTERNS = [
-    # Weather
+    # Weather — purely public forecast data, no edge
     'temperature', 'rainfall', 'snowfall', 'hurricane', 'tornado',
     'inches of rain', 'inches of snow', 'degrees fahrenheit', 'degrees celsius',
     'weather', 'forecast',
-    # Awards / entertainment
-    'oscar', 'academy award', 'emmy', 'grammy', 'bafta', 'golden globe',
-    'box office', 'will win best', 'best picture', 'best actor', 'best actress',
-    'best director', 'best album', 'best song',
-    # Reality TV
-    'bachelor', 'bachelorette', 'survivor', 'big brother', 'idol',
-    'dancing with the stars', 'x factor',
-    # Space / science (low signal)
-    'rocket launch', 'will nasa', 'will spacex launch',
-    'will the sun', 'solar flare',
+    # Reality TV — no information edge
+    'will win bachelor', 'will win bachelorette', 'will win survivor',
+    'will win big brother', 'will win american idol',
+    'dancing with the stars', 'x factor winner',
+    # Space / science — public announcements, no edge
+    'rocket launch', 'will nasa ', 'will spacex launch',
+    'solar flare', 'will the sun',
 ]
 
 def _should_skip_event(event, question=''):
