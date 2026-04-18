@@ -15,7 +15,6 @@
   --amber:#c27803;--amber-light:#fffbeb;
   --purple:#7c3aed;--purple-light:#f5f3ff;
   --red:#e02424;--red-light:#fef2f2;
-  --blue:#1a56db;--blue-light:#eff4ff;
   --slate:#64748b;--slate-light:#f1f5f9;
 }
 body{font-family:'Sora',sans-serif;background:var(--off);color:var(--ink);font-size:14px;line-height:1.6;min-height:100vh;}
@@ -32,29 +31,42 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .refresh-btn:hover{background:var(--off);}
 
 /* SHELL */
-.main{max-width:1280px;margin:0 auto;padding:28px 40px 80px;}
+.main{max-width:1100px;margin:0 auto;padding:28px 40px 80px;}
 
 /* STATS */
-.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:32px;}
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;}
 .stat{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px 20px;}
 .stat-val{font-size:26px;font-weight:600;color:var(--ink);font-family:'JetBrains Mono',monospace;letter-spacing:-1px;}
 .stat-val.accent{color:var(--accent);}
 .stat-label{font-size:11px;color:var(--ink3);margin-top:4px;text-transform:uppercase;letter-spacing:.06em;}
 
-/* DASHBOARD GRID */
-.dashboard{display:grid;grid-template-columns:1fr 360px;gap:24px;align-items:start;}
+/* TAB BAR */
+.tab-bar{display:flex;align-items:center;gap:0;margin-bottom:24px;border-bottom:2px solid var(--border);}
+.tab-btn{font-size:14px;font-weight:500;padding:10px 24px;border:none;background:transparent;color:var(--ink3);cursor:pointer;font-family:'Sora',sans-serif;position:relative;transition:color .15s;}
+.tab-btn:hover{color:var(--ink2);}
+.tab-btn.active{color:var(--accent);}
+.tab-btn.active::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:2px;background:var(--accent);border-radius:2px 2px 0 0;}
+.tab-count{display:inline-block;font-size:11px;font-family:'JetBrains Mono',monospace;background:var(--off);border:1px solid var(--border);border-radius:10px;padding:1px 7px;margin-left:6px;color:var(--ink3);}
+.tab-btn.active .tab-count{background:var(--accent-light);border-color:transparent;color:var(--accent);}
 
-/* SECTION HEADERS */
-.section-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
-.section-title{font-size:18px;font-weight:600;color:var(--ink);}
-.section-count{font-size:12px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
-.section-filters{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap;}
+/* SECTION FILTERS */
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.section-filters{display:flex;gap:5px;flex-wrap:wrap;}
 .sf{font-size:12px;padding:4px 12px;border:1px solid var(--border);border-radius:6px;color:var(--ink2);cursor:pointer;background:var(--white);font-family:'Sora',sans-serif;transition:all .15s;}
 .sf:hover{background:var(--off);}
 .sf.on{background:var(--accent);color:var(--white);border-color:var(--accent);font-weight:500;}
 
-/* SIGNAL CARDS */
+/* VIEWS */
+.view{display:none;}
+.view.active{display:block;}
+
+/* SIGNAL CARDS (shared) */
 .signal-stack{display:flex;flex-direction:column;gap:12px;}
+
+/* Intelligence cards — full width, 2-col grid on wide screens */
+.intel-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+@media(max-width:780px){.intel-grid{grid-template-columns:1fr;}}
+
 .card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
 .card.no_news  {border-left:4px solid var(--purple);}
 .card.confirmed{border-left:4px solid var(--green);}
@@ -64,12 +76,12 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .card.terminal {border-left:4px solid var(--slate);opacity:.7;}
 
 .card-top{display:flex;align-items:center;gap:8px;padding:11px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
-.card.no_news  .card-top{background:var(--purple-light);}
-.card.confirmed.card-top{background:var(--green-light);}
+.card.no_news .card-top  {background:var(--purple-light);}
+.card.confirmed .card-top{background:var(--green-light);}
 .card.explained .card-top{background:var(--off);}
-.card.reversal .card-top{background:var(--red-light);}
+.card.reversal .card-top {background:var(--red-light);}
 .card.uncertain .card-top{background:var(--amber-light);}
-.card.terminal .card-top{background:var(--slate-light);}
+.card.terminal .card-top {background:var(--slate-light);}
 
 .sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .card.no_news .sdot  {background:var(--purple);animation:pp 1.5s infinite;}
@@ -98,7 +110,6 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .question{font-size:14px;font-weight:500;color:var(--ink);line-height:1.55;margin-bottom:12px;}
 .question a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
 .question a:hover{color:var(--accent);}
-
 .platform-tag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace;margin-left:6px;vertical-align:middle;}
 .poly{background:#dbeafe;color:#1e40af;}
 .kal {background:#d1fae5;color:#065f46;}
@@ -128,13 +139,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .art-hl{font-size:13px;font-weight:500;color:var(--ink);line-height:1.5;}
 .art-hl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
 
-/* CONTEXT PILL (sports) */
-.ctx-pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;}
-.ctx-live    {background:var(--red-light);color:var(--red);}
-.ctx-resolved{background:var(--slate-light);color:var(--slate);}
-.ctx-pregame {background:var(--accent-light);color:var(--accent);}
-
-/* RELATED CONTRACTS */
+/* Related contracts */
 .related-toggle{display:flex;align-items:center;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--ink3);cursor:pointer;user-select:none;}
 .related-toggle:hover{color:var(--ink2);}
 .chevron{transition:transform .2s;display:inline-block;font-size:10px;}
@@ -146,49 +151,53 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .rel-odds{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink);}
 .rel-type{font-size:11px;color:var(--ink3);font-style:italic;}
 
-/* SPORTS SIDEBAR */
-.sports-panel{position:sticky;top:68px;}
-.sports-stack{display:flex;flex-direction:column;gap:10px;}
+/* SPORTS CARDS — full width, 3-col grid */
+.sports-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+@media(max-width:900px){.sports-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:560px){.sports-grid{grid-template-columns:1fr;}}
 
 .sport-card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
 .sport-card.terminal{opacity:.6;}
-.sport-card.ctx-live-card  {border-left:4px solid var(--red);}
-.sport-card.ctx-pregame-card{border-left:4px solid var(--accent);}
+.sport-card.ctx-live-card    {border-left:4px solid var(--red);}
+.sport-card.ctx-pregame-card {border-left:4px solid var(--accent);}
 .sport-card.ctx-resolved-card{border-left:4px solid var(--slate);}
 
-.sport-top{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);}
+.sport-top{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);}
 .sport-cat{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
 .sport-ctx-tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:auto;font-family:'JetBrains Mono',monospace;}
 .tag-live    {background:var(--red-light);color:var(--red);}
 .tag-resolved{background:var(--slate-light);color:var(--slate);}
 .tag-pregame {background:var(--accent-light);color:var(--accent);}
 
-.sport-body{padding:12px 14px;}
-.sport-q{font-size:13px;font-weight:500;color:var(--ink);line-height:1.5;margin-bottom:10px;}
+.sport-body{padding:14px 14px 12px;}
+.sport-q{font-size:13px;font-weight:500;color:var(--ink);line-height:1.5;margin-bottom:12px;}
 .sport-q a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
 .sport-q a:hover{color:var(--accent);}
-.sport-move-row{display:flex;align-items:center;gap:8px;}
+.sport-move-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
 .sp-from{font-size:12px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
-.sp-to{font-size:17px;font-weight:600;font-family:'JetBrains Mono',monospace;}
+.sp-arr{font-size:12px;color:var(--ink3);}
+.sp-to{font-size:18px;font-weight:600;font-family:'JetBrains Mono',monospace;}
 .sp-to.up  {color:var(--green);}
 .sp-to.down{color:var(--amber);}
 .sp-badge{font-size:11px;padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-weight:500;}
 .sp-score{font-size:11px;color:var(--ink3);font-family:'JetBrains Mono',monospace;margin-left:auto;}
-.sport-note{margin-top:7px;font-size:12px;color:var(--ink3);font-style:italic;}
+.sport-note{font-size:12px;color:var(--ink3);font-style:italic;}
+.sport-obs{padding:10px 14px;border-top:1px solid var(--border);background:var(--ink);}
+.sport-obs-label{font-size:10px;font-weight:600;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;}
+.sport-obs-text{font-size:12px;color:rgba(255,255,255,.85);line-height:1.65;font-style:italic;}
 
 /* EMPTY / LOADING */
-.empty{background:var(--white);border:1px dashed var(--border2);border-radius:12px;padding:40px;text-align:center;}
+.empty{background:var(--white);border:1px dashed var(--border2);border-radius:12px;padding:48px;text-align:center;}
 .empty strong{font-size:15px;font-weight:600;color:var(--ink);display:block;margin-bottom:6px;}
 .empty p{font-size:13px;color:var(--ink3);}
 .loading{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:40px;text-align:center;color:var(--ink3);font-size:13px;}
 .error{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;color:var(--red);font-size:13px;margin-bottom:16px;display:none;}
 
-@media(max-width:900px){
-  .dashboard{grid-template-columns:1fr;}
-  .sports-panel{position:static;}
+@media(max-width:700px){
   .stats-bar{grid-template-columns:repeat(2,1fr);}
-  .main{padding:20px 16px 60px;}
+  .main{padding:16px 16px 60px;}
   nav{padding:0 16px;}
+  .tab-btn{padding:10px 14px;font-size:13px;}
 }
 </style>
 </head>
@@ -211,42 +220,46 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
     <div class="stat"><div class="stat-val accent" id="stat-high">—</div><div class="stat-label">High confidence</div></div>
   </div>
 
+  <!-- TAB BAR -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('intelligence', this)">
+      Intelligence <span class="tab-count" id="tab-count-intel">—</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('sports', this)">
+      Sports <span class="tab-count" id="tab-count-sports">—</span>
+    </button>
+  </div>
+
   <div id="error-box" class="error"></div>
 
-  <div class="dashboard">
-
-    <!-- INTELLIGENCE (left) -->
-    <div>
-      <div class="section-head">
-        <div class="section-title">Intelligence feed</div>
-        <div class="section-count" id="intel-count"></div>
-        <div class="section-filters" id="intel-filters">
-          <button class="sf on" onclick="setIntelFilter('all',this)">All</button>
-          <button class="sf" onclick="setIntelFilter('geopolitical',this)">Geo</button>
-          <button class="sf" onclick="setIntelFilter('macro',this)">Macro</button>
-          <button class="sf" onclick="setIntelFilter('political',this)">Political</button>
-          <button class="sf" onclick="setIntelFilter('crypto',this)">Crypto</button>
-          <button class="sf" onclick="setIntelFilter('commodities',this)">Commodities</button>
-        </div>
+  <!-- INTELLIGENCE VIEW -->
+  <div id="view-intelligence" class="view active">
+    <div class="section-head">
+      <div class="section-filters" id="intel-filters">
+        <button class="sf on" onclick="setIntelFilter('all',this)">All</button>
+        <button class="sf" onclick="setIntelFilter('geopolitical',this)">Geo</button>
+        <button class="sf" onclick="setIntelFilter('macro',this)">Macro</button>
+        <button class="sf" onclick="setIntelFilter('political',this)">Political</button>
+        <button class="sf" onclick="setIntelFilter('crypto',this)">Crypto</button>
+        <button class="sf" onclick="setIntelFilter('commodities',this)">Commodities</button>
       </div>
-      <div class="signal-stack" id="intel-feed"><div class="loading">Loading signals…</div></div>
     </div>
-
-    <!-- SPORTS (right sidebar) -->
-    <div class="sports-panel">
-      <div class="section-head">
-        <div class="section-title">Sports</div>
-        <div class="section-count" id="sports-count"></div>
-        <div class="section-filters" id="sports-filters">
-          <button class="sf on" onclick="setSportsFilter('all',this)">All</button>
-          <button class="sf" onclick="setSportsFilter('live',this)">Live</button>
-          <button class="sf" onclick="setSportsFilter('pregame',this)">Pre-game</button>
-        </div>
-      </div>
-      <div class="sports-stack" id="sports-feed"><div class="loading">Loading…</div></div>
-    </div>
-
+    <div class="intel-grid" id="intel-feed"><div class="loading">Loading signals…</div></div>
   </div>
+
+  <!-- SPORTS VIEW -->
+  <div id="view-sports" class="view">
+    <div class="section-head">
+      <div class="section-filters" id="sports-filters">
+        <button class="sf on" onclick="setSportsFilter('all',this)">All</button>
+        <button class="sf" onclick="setSportsFilter('live',this)">Live</button>
+        <button class="sf" onclick="setSportsFilter('pregame',this)">Pre-game</button>
+        <button class="sf" onclick="setSportsFilter('resolved',this)">Resolved</button>
+      </div>
+    </div>
+    <div class="sports-grid" id="sports-feed"><div class="loading">Loading…</div></div>
+  </div>
+
 </div>
 
 <script>
@@ -255,116 +268,117 @@ const INTEL_CATS  = new Set(['geopolitical','macro','political','crypto','commod
 const SPORTS_CATS = new Set(['sports','esports'])
 let allSignals = [], intelFilter = 'all', sportsFilter = 'all'
 
+// ── UTILS ─────────────────────────────────────────────────────────────────
+
 function timeAgo(d) {
-  const ts = d && !d.endsWith('Z') ? d + 'Z' : d
+  const ts = d && !d.endsWith('Z') ? d+'Z' : d
   const s  = (Date.now() - new Date(ts)) / 1000
-  if (s < 60)    return Math.floor(s) + 's ago'
-  if (s < 3600)  return Math.floor(s/60) + 'm ago'
-  if (s < 86400) return Math.floor(s/3600) + 'h ago'
-  return Math.floor(s/86400) + 'd ago'
+  if (s < 60)    return Math.floor(s)+'s ago'
+  if (s < 3600)  return Math.floor(s/60)+'m ago'
+  if (s < 86400) return Math.floor(s/3600)+'h ago'
+  return Math.floor(s/86400)+'d ago'
 }
 function fmtVol(v) {
-  if (!v)      return '$0'
-  if (v >= 1e9) return '$' + (v/1e9).toFixed(1) + 'B'
-  if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M'
-  if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'K'
-  return '$' + v.toFixed(0)
+  if (!v)       return '$0'
+  if (v >= 1e9) return '$'+(v/1e9).toFixed(1)+'B'
+  if (v >= 1e6) return '$'+(v/1e6).toFixed(1)+'M'
+  if (v >= 1e3) return '$'+(v/1e3).toFixed(0)+'K'
+  return '$'+v.toFixed(0)
 }
-function pct(v) { return Math.round(v * 100) }
+function pct(v) { return Math.round(v*100) }
 async function fetchR(url, n=3) {
   for (let i=0; i<n; i++) {
-    try { const r = await fetch(url); if (!r.ok) throw new Error(r.status); return await r.json() }
-    catch(e) { if (i===n-1) throw e; await new Promise(r=>setTimeout(r,2000)) }
+    try { const r=await fetch(url); if(!r.ok) throw new Error(r.status); return await r.json() }
+    catch(e) { if(i===n-1) throw e; await new Promise(r=>setTimeout(r,2000)) }
   }
+}
+
+// ── TAB SWITCHING ─────────────────────────────────────────────────────────
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'))
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
+  document.getElementById('view-'+name).classList.add('active')
+  btn.classList.add('active')
 }
 
 // ── INTELLIGENCE HELPERS ──────────────────────────────────────────────────
 
 function cardClass(s) {
-  if (s.state === 'terminal') return 'terminal'
-  if (s.is_reversal)          return 'reversal'
+  if (s.state==='terminal') return 'terminal'
+  if (s.is_reversal)        return 'reversal'
   return s.state || 'uncertain'
 }
 
 function stateLabel(s) {
-  if (s.state === 'terminal')  return 'Match concluded · Market resolved'
-  if (s.is_reversal)           return 'Reversal · Contract moved opposite direction'
-  if (s.is_sports && s.sports_context === 'large_ingame_move')    return 'Large in-game move · Live event'
-  if (s.is_sports && s.sports_context === 'moderate_ingame_move') return 'In-game move · Live event'
-  if (s.is_sports && s.sports_context === 'pre_game_move')        return 'Pre-game shift · No news'
-  if (s.category === 'geopolitical' && s.state === 'no_news')     return 'Geopolitical shift · No public news'
-  if (s.category === 'geopolitical' && s.state === 'confirmed')   return 'Geopolitical signal · Capital moved before news'
+  if (s.state==='terminal')  return 'Match concluded · Market resolved'
+  if (s.is_reversal)         return 'Reversal · Contract moved opposite direction'
+  if (s.category==='geopolitical' && s.state==='no_news')    return 'Geopolitical shift · No public news'
+  if (s.category==='geopolitical' && s.state==='confirmed')  return 'Geopolitical signal · Capital moved before news'
   if ((s.category==='macro'||s.category==='political') && s.state==='no_news') return 'No news · High priority'
-  if (s.state === 'no_news')   return 'Inconsistent · No public news'
-  if (s.state === 'confirmed') return 'News broke after position · Capital moved first'
-  if (s.state === 'explained') return 'News already existed · May explain the move'
-  if (s.state === 'uncertain') return 'News found · Timing unclear'
+  if (s.state==='no_news')   return 'Inconsistent · No public news'
+  if (s.state==='confirmed') return 'News broke after position · Capital moved first'
+  if (s.state==='explained') return 'News already existed · May explain the move'
+  if (s.state==='uncertain') return 'News found · Timing unclear'
   return 'Signal detected'
 }
 
 function moveColor(s) {
-  if (s.state === 'terminal') return 'var(--slate)'
-  if (s.is_reversal)          return 'var(--red)'
-  if (s.state === 'no_news')  return 'var(--purple)'
-  return s.direction === 'YES' ? 'var(--green)' : 'var(--amber)'
+  if (s.state==='terminal') return 'var(--slate)'
+  if (s.is_reversal)        return 'var(--red)'
+  if (s.state==='no_news')  return 'var(--purple)'
+  return s.direction==='YES' ? 'var(--green)' : 'var(--amber)'
 }
 
 function moveBadgeClass(s) {
-  if (s.is_reversal)         return 'move-red'
-  if (s.state === 'no_news') return 'move-up'
-  return s.direction === 'YES' ? 'move-up' : 'move-down'
+  if (s.is_reversal)        return 'move-red'
+  if (s.state==='no_news')  return 'move-up'
+  return s.direction==='YES' ? 'move-up' : 'move-down'
 }
 
 function scoreClass(c) {
-  if (c === 'extreme') return 'score-extreme'
-  if (c === 'high')    return 'score-high'
+  if (c==='extreme') return 'score-extreme'
+  if (c==='high')    return 'score-high'
   return 'score-medium'
 }
 
 function buildObservation(s) {
-  const prev = pct(s.prev_odds), curr = pct(s.current_odds), move = pct(s.price_move)
-  const rel  = (s.related_same_event||0) + (s.related_cross_event||0)
-
-  if (s.state === 'terminal') {
-    const outcome = curr >= 98 ? 'YES' : 'NO'
-    return `"${s.platform} contract settled at ${curr}% — market resolved to ${outcome}. This reflects match conclusion, not a live information signal."`
+  const prev=pct(s.prev_odds), curr=pct(s.current_odds), move=pct(s.price_move)
+  const rel=(s.related_same_event||0)+(s.related_cross_event||0)
+  if (s.state==='terminal') {
+    return `"${s.platform} contract settled at ${curr}% — market resolved ${curr>=98?'YES':'NO'}. This reflects match conclusion, not a live information signal."`
   }
   if (s.is_reversal) {
-    const pd = s.reversal_from === 'YES' ? 'up' : 'down'
-    const nd = s.direction === 'YES' ? 'up' : 'down'
+    const pd=s.reversal_from==='YES'?'up':'down', nd=s.direction==='YES'?'up':'down'
     return `"Contract previously moved ${pd} ${s.reversal_prev_move||move} points, now reversing ${nd} ${move} points. Sharp reversals can indicate informed positioning on both sides — or a correction of an earlier overreaction."`
   }
-  if (s.category === 'geopolitical' && s.state === 'no_news')
+  if (s.category==='geopolitical'&&s.state==='no_news')
     return `"${move}pt shift on a geopolitical contract with no public news. Geo markets move slowly by nature — this speed is atypical and may reflect off-channel diplomatic or intelligence signals."`
-  if (s.category === 'macro' && s.state === 'no_news')
+  if (s.category==='macro'&&s.state==='no_news')
     return `"Macro contract moved ${prev}% → ${curr}%${rel>0?` across ${rel+1} related markets`:''} with no news. Unexplained macro moves are high-priority — they often precede central bank leaks or economic data."`
-  if (s.state === 'confirmed')
+  if (s.state==='confirmed')
     return `"${s.platform} contract moved ${move} points before news confirmation. Capital appeared to price in the information early."`
-  if (s.state === 'no_news')
+  if (s.state==='no_news')
     return `"${s.platform} contract moved from ${prev}% to ${curr}% — a ${move} point shift${rel>0?` across ${rel+1} related contracts`:''} with no public news found."`
-  if (s.state === 'explained')
+  if (s.state==='explained')
     return `"News pre-dates this move. The market may be catching up to existing public information."`
-  return `"Signal detected and tracked. ${s.platform} contract moved ${move} points. Full record logged."`
+  return `"Signal detected. ${s.platform} contract moved ${move} points from ${prev}% to ${curr}%."`
 }
 
 function renderIntelCard(s) {
-  const color  = moveColor(s)
-  const isUp   = s.direction === 'YES'
-  const move   = pct(s.price_move)
-  const curr   = pct(s.current_odds)
-  const prev   = pct(s.prev_odds)
-  const sign   = isUp ? '+' : '−'
-  const cc     = cardClass(s)
-
-  const newsHtml = s.state === 'terminal' ? '' :
+  const color = moveColor(s)
+  const isUp  = s.direction==='YES'
+  const move  = pct(s.price_move), curr=pct(s.current_odds), prev=pct(s.prev_odds)
+  const sign  = isUp ? '+' : '−'
+  const cc    = cardClass(s)
+  const newsHtml = s.state==='terminal' ? '' :
     s.news_vacuum
       ? `<div class="news-section"><div class="ns-label">News check</div><div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div></div>`
       : s.news_headline
         ? `<div class="news-section"><div class="ns-label">News check</div><div class="art"><span class="art-src">${s.news_source||'News'}</span><div class="art-hl"><a href="${s.news_url}" target="_blank" rel="noopener">${s.news_headline}</a></div></div></div>`
         : ''
-
   const related = Array.isArray(s.related_contracts) ? s.related_contracts : []
-  const relHtml = related.length > 0 ? `
+  const relHtml = related.length>0 ? `
     <div class="related-toggle" onclick="toggleRelated(this)">
       <span class="chevron">▾</span>&nbsp;${related.length} related contract${related.length>1?'s':''}
     </div>
@@ -375,7 +389,6 @@ function renderIntelCard(s) {
         <div class="rel-type">${r.type==='causal'?'Causally linked':r.type==='cross_event'?'Related event':'Same event'}</div>
       </div>`).join('')}
     </div>` : ''
-
   return `<div class="card ${cc}">
     <div class="card-top">
       <div class="sdot"></div>
@@ -420,25 +433,26 @@ function sportsCardClass(ctx) {
   if (ctx==='large_ingame_move'||ctx==='moderate_ingame_move') return 'ctx-live-card'
   return 'ctx-pregame-card'
 }
-function sportsNote(s) {
-  const move = pct(s.price_move), ctx = s.sports_context
-  if (ctx==='match_resolved_yes')  return 'Market settled — YES won.'
-  if (ctx==='match_resolved_no')   return 'Market settled — NO won.'
-  if (ctx==='large_ingame_move')   return `${move}pt in-game move — check live score.`
-  if (ctx==='moderate_ingame_move')return `${move}pt shift while live.`
-  if (ctx==='pre_game_move'&&s.state==='no_news') return 'Pre-game shift with no public news.'
-  return ''
+function sportsObservation(s) {
+  const move=pct(s.price_move), curr=pct(s.current_odds), prev=pct(s.prev_odds)
+  const ctx=s.sports_context
+  if (s.ai_summary) return s.ai_summary
+  if (ctx==='match_resolved_yes') return `Market settled at ${curr}% — YES won. Contract has resolved.`
+  if (ctx==='match_resolved_no')  return `Market settled at ${curr}% — NO won. Contract has resolved.`
+  if (ctx==='large_ingame_move')  return `${move}pt in-game move while the event is live. A score, red card, or injury likely explains this — check the live score to confirm.`
+  if (ctx==='moderate_ingame_move') return `${move}pt shift during a live event. Moderate in-game moves are normal; verify against the live score.`
+  if (ctx==='pre_game_move'&&s.state==='no_news') return `Pre-game contract moved ${prev}% → ${curr}% with no public news. May reflect lineup leaks, injury information, or sharp money ahead of the match.`
+  return `${s.platform} contract moved ${move} points from ${prev}% to ${curr}%.`
 }
 
 function renderSportsCard(s) {
-  const isUp = s.direction === 'YES'
-  const curr = pct(s.current_odds), prev = pct(s.prev_odds), move = pct(s.price_move)
-  const sign = isUp ? '+' : '−'
-  const ctx  = s.sports_context || ''
-  const note = sportsNote(s)
+  const isUp=s.direction==='YES', curr=pct(s.current_odds), prev=pct(s.prev_odds), move=pct(s.price_move)
+  const sign=isUp?'+':'−', ctx=s.sports_context||''
+  const obs=sportsObservation(s)
   return `<div class="sport-card ${s.is_terminal?'terminal':''} ${sportsCardClass(ctx)}">
     <div class="sport-top">
       <span class="sport-cat">${s.category}</span>
+      <span class="stime" style="margin-left:auto;margin-right:4px">${timeAgo(s.detected_at)}</span>
       ${sportsCtxTag(ctx)}
     </div>
     <div class="sport-body">
@@ -447,11 +461,15 @@ function renderSportsCard(s) {
       </div>
       <div class="sport-move-row">
         <span class="sp-from">${prev}%</span>
+        <span class="sp-arr">to</span>
         <span class="sp-to ${isUp?'up':'down'}">${curr}%</span>
         <span class="sp-badge ${isUp?'move-up':'move-down'}">${sign}${move}%</span>
         <span class="sp-score">Score ${s.score}</span>
       </div>
-      ${note?`<div class="sport-note">${note}</div>`:''}
+    </div>
+    <div class="sport-obs">
+      <div class="sport-obs-label">${s.ai_summary ? 'What this means' : 'Context'}</div>
+      <div class="sport-obs-text">${obs}</div>
     </div>
   </div>`
 }
@@ -462,80 +480,81 @@ function toggleRelated(el) {
   el.classList.toggle('open')
   el.nextElementSibling.classList.toggle('open')
 }
+
 function setIntelFilter(cat, el) {
-  intelFilter = cat
+  intelFilter=cat
   document.querySelectorAll('#intel-filters .sf').forEach(b=>b.classList.remove('on'))
   el.classList.add('on')
   renderIntel()
 }
 function setSportsFilter(f, el) {
-  sportsFilter = f
+  sportsFilter=f
   document.querySelectorAll('#sports-filters .sf').forEach(b=>b.classList.remove('on'))
   el.classList.add('on')
   renderSports()
 }
 
 function renderIntel() {
-  const el = document.getElementById('intel-feed')
-  let sigs = allSignals.filter(s => INTEL_CATS.has(s.category))
-  if (intelFilter !== 'all') sigs = sigs.filter(s => s.category === intelFilter)
-  // no_news signals float to top, then by score
-  sigs.sort((a,b) => {
-    const au = a.state==='no_news'?1:0, bu = b.state==='no_news'?1:0
+  const el=document.getElementById('intel-feed')
+  let sigs=allSignals.filter(s=>INTEL_CATS.has(s.category))
+  if (intelFilter!=='all') sigs=sigs.filter(s=>s.category===intelFilter)
+  sigs.sort((a,b)=>{
+    const au=a.state==='no_news'?1:0, bu=b.state==='no_news'?1:0
     return au!==bu ? bu-au : b.score-a.score
   })
-  document.getElementById('intel-count').textContent = sigs.length + ' signal' + (sigs.length!==1?'s':'')
-  el.innerHTML = sigs.length
+  document.getElementById('tab-count-intel').textContent=sigs.length
+  el.innerHTML=sigs.length
     ? sigs.map(renderIntelCard).join('')
-    : `<div class="empty"><strong>No signals yet</strong><p>Nothing flagged in this category. The poller runs every 5 minutes.</p></div>`
+    : `<div class="empty" style="grid-column:1/-1"><strong>No signals yet</strong><p>Nothing flagged in this category. The poller runs every 5 minutes.</p></div>`
 }
 
 function renderSports() {
-  const el = document.getElementById('sports-feed')
-  let sigs = allSignals.filter(s => SPORTS_CATS.has(s.category))
-  if (sportsFilter==='live')    sigs = sigs.filter(s=>s.sports_context==='large_ingame_move'||s.sports_context==='moderate_ingame_move')
-  if (sportsFilter==='pregame') sigs = sigs.filter(s=>s.sports_context==='pre_game_move')
-  // resolved cards sink to bottom
-  sigs.sort((a,b) => {
+  const el=document.getElementById('sports-feed')
+  let sigs=allSignals.filter(s=>SPORTS_CATS.has(s.category))
+  if (sportsFilter==='live')     sigs=sigs.filter(s=>s.sports_context==='large_ingame_move'||s.sports_context==='moderate_ingame_move')
+  if (sportsFilter==='pregame')  sigs=sigs.filter(s=>s.sports_context==='pre_game_move')
+  if (sportsFilter==='resolved') sigs=sigs.filter(s=>s.is_terminal)
+  // resolved sink to bottom
+  sigs.sort((a,b)=>{
     const ar=a.is_terminal?1:0, br=b.is_terminal?1:0
     return ar!==br ? ar-br : b.score-a.score
   })
-  document.getElementById('sports-count').textContent = sigs.length + ' signal' + (sigs.length!==1?'s':'')
-  el.innerHTML = sigs.length
+  document.getElementById('tab-count-sports').textContent=sigs.length
+  el.innerHTML=sigs.length
     ? sigs.map(renderSportsCard).join('')
-    : `<div class="empty"><strong>No sports signals</strong><p>No unusual movements detected yet.</p></div>`
+    : `<div class="empty" style="grid-column:1/-1"><strong>No sports signals</strong><p>No unusual movements detected yet.</p></div>`
 }
 
 async function loadStats() {
   try {
-    const d = await fetchR(`${API}/stats`)
+    const d=await fetchR(`${API}/stats`)
     document.getElementById('stat-volume').textContent  = fmtVol(d.total_volume_monitored)
     document.getElementById('stat-markets').textContent = (d.market_count??0).toLocaleString()
-    document.getElementById('stat-today').textContent   = d.today ?? 0
-    document.getElementById('stat-high').textContent    = d.high_confidence ?? 0
+    document.getElementById('stat-today').textContent   = d.today??0
+    document.getElementById('stat-high').textContent    = d.high_confidence??0
   } catch(e) {}
 }
 
 async function loadFeed() {
   try {
-    const d = await fetchR(`${API}/feed`)
-    document.getElementById('error-box').style.display = 'none'
-    allSignals = d.feed || []
-    if (allSignals.length > 0)
-      document.getElementById('live-label').textContent = 'Updated ' + timeAgo(allSignals[0].detected_at)
+    const d=await fetchR(`${API}/feed`)
+    document.getElementById('error-box').style.display='none'
+    allSignals=d.feed||[]
+    if (allSignals.length>0)
+      document.getElementById('live-label').textContent='Updated '+timeAgo(allSignals[0].detected_at)
     renderIntel()
     renderSports()
   } catch(e) {
-    const b = document.getElementById('error-box')
-    b.style.display = 'block'
-    b.textContent = `Could not connect to API at ${API}. Check Railway is running.`
-    document.getElementById('intel-feed').innerHTML = ''
-    document.getElementById('sports-feed').innerHTML = ''
+    const b=document.getElementById('error-box')
+    b.style.display='block'
+    b.textContent=`Could not connect to API at ${API}. Check Railway is running.`
+    document.getElementById('intel-feed').innerHTML=''
+    document.getElementById('sports-feed').innerHTML=''
   }
 }
 
 async function loadAll() { await Promise.all([loadStats(), loadFeed()]) }
-setInterval(loadAll, 5 * 60 * 1000)
+setInterval(loadAll, 5*60*1000)
 loadAll()
 </script>
 </body>
