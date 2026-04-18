@@ -151,9 +151,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .rel-type{font-size:11px;color:var(--ink3);font-style:italic;}
 
 /* SPORTS CARDS — full width, 3-col grid */
-.sports-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-@media(max-width:900px){.sports-grid{grid-template-columns:repeat(2,1fr);}}
-@media(max-width:560px){.sports-grid{grid-template-columns:1fr;}}
+.sports-grid{display:flex;flex-direction:column;gap:12px;}
 
 .sport-card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
 .sport-card.terminal{opacity:.6;}
@@ -521,7 +519,7 @@ function renderSports() {
   document.getElementById('tab-count-sports').textContent=sigs.length
   el.innerHTML=sigs.length
     ? sigs.map(renderSportsCard).join('')
-    : `<div class="empty" style="grid-column:1/-1"><strong>No sports signals</strong><p>No unusual movements detected yet.</p></div>`
+    : `<div class="empty"><strong>No sports signals</strong><p>No unusual movements detected yet.</p></div>`
 }
 
 async function loadStats() {

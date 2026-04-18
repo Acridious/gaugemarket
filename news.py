@@ -243,6 +243,7 @@ _SPORTS_SIGNALS = [
     'formula 1', 'formula one', 'f1 ', 'motogp', 'nascar',
     'wnba', 'ncaa', 'ipl', 'big bash',               # more leagues
 
+    'odd/even', 'odd even',  # prop bet format used in both sports and esports
     # Common sports result format: "Team A to beat Team B"
     ' to beat ', ' beats ', ' beat ',
     ' defeats ', ' def ',
@@ -297,6 +298,11 @@ def _fast_esports_check(event_title, question):
         'map winner', 'map handicap',
         'round winner', 'kill race', 'first blood',
         'first tower', 'first dragon', 'first baron',
+        # Esports prop patterns
+        'total kills', 'odd/even', 'odd even',
+        'first kill', 'most kills', 'kill diff',
+        'map 1:', 'map 2:', 'map 3:',   # "Map 1: ..." format
+        'pistol round', 'eco round',
     ]
     return any(sig in text for sig in esports_signals)
 
