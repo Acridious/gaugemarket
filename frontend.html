@@ -22,9 +22,7 @@
   .logo{font-size:17px;font-weight:600;}
   .logo span{color:var(--accent);}
   .nav-right{display:flex;align-items:center;gap:16px;}
-  .live-badge{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--green);font-family:'JetBrains Mono',monospace;}
-  .live-dot{width:7px;height:7px;background:var(--green);border-radius:50%;animation:blink 1.5s infinite;}
-  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+
   .refresh-btn{font-size:13px;padding:7px 16px;border:1px solid var(--border2);border-radius:6px;background:var(--white);color:var(--ink2);cursor:pointer;font-family:'Sora',sans-serif;}
   .refresh-btn:hover{background:var(--off);}
 
@@ -152,7 +150,6 @@
 <nav>
   <div class="logo">Gauge<span>Market</span></div>
   <div class="nav-right">
-    <div class="live-badge"><div class="live-dot"></div><span id="live-status">Connecting...</span></div>
     <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
   </div>
 </nav>
@@ -389,11 +386,9 @@
       document.getElementById('stat-total').textContent = data.total ?? 0
       document.getElementById('stat-today').textContent = data.today ?? 0
       document.getElementById('stat-high').innerHTML = `<span>${data.high_confidence ?? 0}</span>`
-      document.getElementById('live-status').textContent = 'Live'
-      document.querySelector('.live-dot').style.background = 'var(--green)'
+
     } catch(e) {
-      document.getElementById('live-status').textContent = 'Offline'
-      document.querySelector('.live-dot').style.background = 'var(--red)'
+
     }
   }
 
