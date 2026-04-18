@@ -127,14 +127,32 @@ def _should_ask_groq(sig_a, sig_b):
     if one_sports and one_causal:
         return False, 'sports_x_causal_mismatch'
 
-    # Both sports with zero word overlap → almost certainly different sports/events
+    # Both sports — only worth asking Groq if same event_id (already handled above)
+    # or same team appears in both questions. Different matches are never related.
     words_a = set(sig_a['question'].lower().split()) - SKIP_WORDS
     words_b = set(sig_b['question'].lower().split()) - SKIP_WORDS
     common  = words_a & words_b
     both_sports = (cat_a in SAME_EVENT_CATEGORIES and
                    cat_b in SAME_EVENT_CATEGORIES)
-    if both_sports and len(common) == 0:
-        return False, 'different_sports_no_overlap'
+
+    if both_sports:
+        # For sports pairs, require at least one meaningful shared word
+        # that isn't a generic match-format word.
+        # "Leverkusen vs Augsburg" / "Leeds vs Wolves" share no team names
+        # so common will be empty after removing vs/will/the etc.
+        # Even if they share a word like a league name, different matches
+        # are never causally related so skip entirely.
+        sports_noise = {'vs', 'vs.', 'fc', 'afc', 'sc', 'utd', 'united',
+                        'city', 'sport', 'sports', 'club', 'total', 'over',
+                        'under', 'spread', 'winner', 'match', 'game'}
+        meaningful_common = common - sports_noise
+        if len(meaningful_common) == 0:
+            return False, 'sports_different_matches'
+        # Even with shared words (e.g. same team name in both), only ask
+        # Groq if it's a same-event check — different matches of the same
+        # team in the same poll are still not causally linked
+        if sig_a.get('event_id') != sig_b.get('event_id'):
+            return False, 'sports_different_events'
 
     # At least one signal must be reasonably strong
     if sig_a.get('score', 0) + sig_b.get('score', 0) < 100:

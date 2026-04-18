@@ -698,27 +698,6 @@ def generate_signal_summary(
             "contract topic and category. Be concrete, not generic."
         )
 
-    try:
-        response = _requests.post(
-            GROQ_URL,
-            headers={
-                'Authorization': f'Bearer {GROQ_API_KEY}',
-                'Content-Type': 'application/json',
-            },
-            json={
-                'model': GROQ_MODEL,
-                'messages': [{'role': 'user', 'content': prompt}],
-                'max_tokens': 150,
-                'temperature': 0.3,   # slight creativity — avoids robotic output
-            },
-            timeout=10,
-        )
-        response.raise_for_status()
-        summary = (
-            response.json()['choices'][0]['message']['content']
-            .strip()
-        )
-        return summary if summary else None
-    except Exception as e:
-        print(f"  Summary generation error: {e}")
-        return None
+    from groq_client import groq_complete
+    summary = groq_complete(prompt, max_tokens=150, temperature=0.3)
+    return summary if summary else None
