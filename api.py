@@ -73,6 +73,9 @@ def enrich_signal(s):
     # sports_context is stored in the signal but may be absent on older rows
     s['sports_context'] = s.get('sports_context') or None
     s['ai_summary'] = s.get('ai_summary') or None
+    s['background_headline'] = s.get('background_headline') or None
+    s['background_source']   = s.get('background_source') or None
+    s['background_url']      = s.get('background_url') or None
 
     # Category context for the frontend
     s['is_sports'] = s.get('category') in SAME_EVENT_CATEGORIES

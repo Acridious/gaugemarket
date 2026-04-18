@@ -563,13 +563,24 @@ def check_news_vacuum(event_title, question, category='other',
         elif 'before' in timings:
             overall_timing = 'before'
 
+    # Background news fallback for non-sports categories.
+    # If nothing found in real-time, try a broader 4-day search.
+    # Marked as 'background' so AI summary frames it as context not explanation.
+    sports_cats = {'sports', 'esports'}
+    background_article = None
+    if not articles_found and category not in sports_cats:
+        background_article = _find_background_news(
+            search_terms, feeds_to_check, max_age_days=4
+        )
+
     return {
         'vacuum': len(articles_found) == 0,
         'articles': articles_found,
         'timing': overall_timing,
         'search_terms': search_terms,
         'sources_checked': sources_checked,
-        'checked_at': datetime.now().isoformat()
+        'checked_at': datetime.now().isoformat(),
+        'background_article': background_article,
     }
 
 
@@ -709,3 +720,41 @@ def generate_signal_summary(
     from groq_client import groq_complete
     summary = groq_complete(prompt, max_tokens=150, temperature=0.3)
     return summary if summary else None
+
+
+def _find_background_news(search_terms, feeds, max_age_days=4):
+    """
+    Fallback: find a loosely related article up to max_age_days old.
+    Uses primary search term only, no Groq check (preserve budget).
+    Returns a single article dict with timing='background', or None.
+    """
+    from datetime import timedelta
+    cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+
+    primary = search_terms[0] if search_terms else ''
+    if not primary:
+        return None
+
+    sources_tried = set()
+    for feed_url, source_name in feeds:
+        if source_name in sources_tried:
+            continue
+        sources_tried.add(source_name)
+
+        entries = fetch_rss(feed_url, source_name)
+        for entry in entries[:30]:
+            title = entry.get('title', '').lower()
+            desc  = entry.get('description', '').lower()
+            if primary not in title and primary not in desc:
+                continue
+            pub_date = parse_article_date(entry.get('pubDate', ''))
+            if pub_date and pub_date < cutoff:
+                continue
+            return {
+                'headline': entry.get('title', ''),
+                'source':   source_name,
+                'url':      entry.get('link', ''),
+                'published': entry.get('pubDate', ''),
+                'timing':   'background',
+            }
+    return None

@@ -137,6 +137,9 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .art-src{font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;background:#dbeafe;color:#1e40af;font-family:'JetBrains Mono',monospace;display:inline-block;margin-bottom:6px;}
 .art-hl{font-size:13px;font-weight:500;color:var(--ink);line-height:1.5;}
 .art-hl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
+.art.background{background:var(--off);border:1px dashed var(--border2);}
+.art.background .art-src{background:var(--off);color:var(--ink3);border:1px solid var(--border);}
+.art-context-label{font-size:11px;color:var(--ink3);margin-bottom:4px;display:block;}
 
 /* Related contracts */
 .related-toggle{display:flex;align-items:center;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--ink3);cursor:pointer;user-select:none;}
@@ -370,7 +373,7 @@ function renderIntelCard(s) {
   const cc    = cardClass(s)
   const newsHtml = s.state==='terminal' ? '' :
     s.news_vacuum
-      ? `<div class="news-section"><div class="ns-label">News check</div><div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div></div>`
+      ? `<div class="news-section"><div class="ns-label">News check</div><div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div>${s.background_headline ? `<div class="art background" style="margin:8px 0 0"><span style="font-size:11px;color:var(--ink3);font-style:italic;display:block;margin-bottom:4px">Background context</span><span class="art-src" style="background:var(--off);color:var(--ink3);border:1px solid var(--border)">${s.background_source||"News"}</span><div class="art-hl"><a href="${s.background_url}" target="_blank" rel="noopener">${s.background_headline}</a></div></div>` : ""}</div>`
       : s.news_headline
         ? `<div class="news-section"><div class="ns-label">News check</div><div class="art"><span class="art-src">${s.news_source||'News'}</span><div class="art-hl"><a href="${s.news_url}" target="_blank" rel="noopener">${s.news_headline}</a></div></div></div>`
         : ''

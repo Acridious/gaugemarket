@@ -587,6 +587,7 @@ def detect_signals(all_markets):
         news_article = (
             news_result['articles'][0] if news_result['articles'] else None
         )
+        background_article = news_result.get('background_article')
 
         sports_label = sports_context_label(current_odds, prev_odds, category)
 
@@ -625,6 +626,9 @@ def detect_signals(all_markets):
             'news_headline':       news_article['headline'] if news_article else None,
             'news_source':         news_article['source'] if news_article else None,
             'news_url':            news_article['url'] if news_article else None,
+            'background_headline': background_article['headline'] if background_article else None,
+            'background_source':   background_article['source']   if background_article else None,
+            'background_url':      background_article['url']      if background_article else None,
             'category':            category,
             'detected_at':         now.isoformat(),
             'is_terminal':         terminal,

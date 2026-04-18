@@ -136,6 +136,9 @@ def setup_db():
             ('is_terminal', 'INTEGER DEFAULT 0'),
             ('mins_elapsed', 'REAL DEFAULT 0'),
             ('ai_summary', 'TEXT'),
+            ('background_headline', 'TEXT'),
+            ('background_source', 'TEXT'),
+            ('background_url', 'TEXT'),
         ]:
             try:
                 conn.run(
@@ -234,14 +237,16 @@ def save_signal(signal_data):
                 volume, score, related_same_event, related_cross_event,
                 news_vacuum, news_headline, news_source, news_url,
                 detected_at, category, related_contracts, news_timing,
-                market_url, ai_summary, is_terminal, mins_elapsed
+                market_url, ai_summary, is_terminal, mins_elapsed,
+                background_headline, background_source, background_url
             ) VALUES (
                 :event_id, :event_title, :question, :platform,
                 :prev_odds, :current_odds, :price_move, :direction,
                 :volume, :score, :related_same_event, :related_cross_event,
                 :news_vacuum, :news_headline, :news_source, :news_url,
                 :detected_at, :category, :related_contracts, :news_timing,
-                :market_url, :ai_summary, :is_terminal, :mins_elapsed
+                :market_url, :ai_summary, :is_terminal, :mins_elapsed,
+                :background_headline, :background_source, :background_url
             )
             RETURNING id
         ''',
@@ -268,6 +273,9 @@ def save_signal(signal_data):
             market_url=signal_data.get('market_url'),
             ai_summary=signal_data.get('ai_summary'),
             is_terminal=1 if signal_data.get('is_terminal', False) else 0,
+            background_headline=signal_data.get('background_headline'),
+            background_source=signal_data.get('background_source'),
+            background_url=signal_data.get('background_url'),
             mins_elapsed=signal_data.get('mins_elapsed', 0),
         )
         return rows[0][0] if rows else None
