@@ -18,23 +18,43 @@ MIN_SIGNAL_SCORE = int(os.environ.get('MIN_SIGNAL_SCORE', 50))
 MIN_VOLUME = float(os.environ.get('MIN_VOLUME', 1000))
 
 def fetch_polymarket_events():
-    try:
-        response = requests.get(
-            f'{POLYMARKET_API}/events',
-            params={
-                'active': True,
-                'closed': False,
-                'limit': 100,
-                'order': 'volume',
-                'ascending': False
-            },
-            timeout=10
-        )
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        print(f"Polymarket fetch error: {e}")
-        return []
+    """
+    Fetch active Polymarket events ordered by 24h volume.
+    Paginates to get up to 500 events — catches niche markets
+    that would be missed with limit=100.
+
+    Order by volume24hr not total volume — a market with $100k
+    traded in the last 24h is more relevant than one with $10M
+    total but no recent activity.
+    """
+    all_events = []
+    offsets = [0, 100, 200, 300, 400]  # 5 pages × 100 = 500 events
+
+    for offset in offsets:
+        try:
+            response = requests.get(
+                f'{POLYMARKET_API}/events',
+                params={
+                    'active': True,
+                    'closed': False,
+                    'limit': 100,
+                    'offset': offset,
+                    'order': 'volume24hr',
+                    'ascending': False
+                },
+                timeout=10
+            )
+            response.raise_for_status()
+            page = response.json()
+            if not page:
+                break
+            all_events.extend(page)
+        except Exception as e:
+            print(f"Polymarket fetch error (offset {offset}): {e}")
+            break
+
+    print(f"Fetched {len(all_events)} events from Polymarket")
+    return all_events
 
 def fetch_kalshi_markets():
     # Kalshi now requires authentication on their API
@@ -60,10 +80,13 @@ def process_polymarket_events(events):
                 
                 yes_odds = float(prices[0]) if prices else 0
                 volume = float(market.get('volume', 0))
-                
-                if volume < MIN_VOLUME:
+
+                # Only skip completely dead markets (zero volume)
+                # MIN_VOLUME used for scoring only — not hard filter
+                # A $100k market moving 26% should never be missed
+                if volume < 1:
                     continue
-                
+
                 processed.append({
                     'market_id': f"poly_{market.get('id', '')}",
                     'event_id': f"poly_event_{event.get('id', '')}",
@@ -247,29 +270,42 @@ def find_related_markets(signal_market, all_markets):
 
     return deduped, []  # cross_event left empty — AI grouper handles this
 
-def score_signal(price_move, mins_elapsed, 
+def score_signal(price_move, mins_elapsed,
                  same_event_count, cross_event_count,
-                 is_cross_platform, news_vacuum):
+                 is_cross_platform, news_vacuum, volume=0):
     score = 0
-    
+
+    # Price move — bigger move = higher score
     if price_move >= 0.30:   score += 40
     elif price_move >= 0.20: score += 30
     elif price_move >= 0.10: score += 20
     elif price_move >= 0.05: score += 10
-    
+    elif price_move >= 0.02: score += 5
+
+    # Speed — faster move = more suspicious
     if mins_elapsed <= 5:    score += 25
     elif mins_elapsed <= 15: score += 20
     elif mins_elapsed <= 30: score += 10
-    
+
+    # Cross-platform convergence
     if is_cross_platform:    score += 20
-    
+
+    # Related markets moving together
     related_count = same_event_count + cross_event_count
     if related_count >= 3:   score += 15
     elif related_count >= 1: score += 8
-    
+
+    # News vacuum — no public explanation
     if news_vacuum:          score += 10
-    
-    return score
+
+    # Volume — adds credibility to the signal
+    # Low volume moves are still detected but score lower
+    if volume >= 1_000_000:  score += 15   # $1M+ very significant
+    elif volume >= 100_000:  score += 10   # $100k+ significant
+    elif volume >= 10_000:   score += 5    # $10k+ notable
+    elif volume < 1_000:     score -= 5    # Under $1k — probably noise
+
+    return max(score, 0)  # never negative
 
 def _build_related_contracts(same_event, cross_event):
     """
@@ -365,7 +401,8 @@ def detect_signals(all_markets):
             len(same_event),
             len(cross_event),
             is_cross_platform,
-            news_result['vacuum']
+            news_result['vacuum'],
+            volume=market['volume']
         )
         
         if signal_score < MIN_SIGNAL_SCORE:
