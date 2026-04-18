@@ -5,149 +5,191 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GaugeMarket — Live Feed</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0;}
-  :root{
-    --white:#ffffff;--off:#f8f9fb;--ink:#0f1117;--ink2:#4a5162;--ink3:#9098a9;
-    --border:#e4e7ef;--border2:#d0d5e0;
-    --accent:#1a56db;--accent-light:#eff4ff;
-    --green:#0e9f6e;--green-light:#f0fdf4;
-    --amber:#c27803;--amber-light:#fffbeb;
-    --purple:#7c3aed;--purple-light:#f5f3ff;
-    --red:#e02424;
-    --slate:#64748b;--slate-light:#f1f5f9;
-  }
-  body{font-family:'Sora',sans-serif;background:var(--off);color:var(--ink);font-size:15px;line-height:1.6;min-height:100vh;}
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --white:#ffffff;--off:#f8f9fb;--ink:#0f1117;--ink2:#4a5162;--ink3:#9098a9;
+  --border:#e4e7ef;--border2:#d0d5e0;
+  --accent:#1a56db;--accent-light:#eff4ff;
+  --green:#0e9f6e;--green-light:#f0fdf4;
+  --amber:#c27803;--amber-light:#fffbeb;
+  --purple:#7c3aed;--purple-light:#f5f3ff;
+  --red:#e02424;--red-light:#fef2f2;
+  --blue:#1a56db;--blue-light:#eff4ff;
+  --slate:#64748b;--slate-light:#f1f5f9;
+}
+body{font-family:'Sora',sans-serif;background:var(--off);color:var(--ink);font-size:14px;line-height:1.6;min-height:100vh;}
 
-  nav{display:flex;justify-content:space-between;align-items:center;padding:16px 40px;border-bottom:1px solid var(--border);background:var(--white);position:sticky;top:0;z-index:100;}
-  .logo{font-size:17px;font-weight:600;}
-  .logo span{color:var(--accent);}
-  .nav-right{display:flex;align-items:center;gap:16px;}
-  .refresh-btn{font-size:13px;padding:7px 16px;border:1px solid var(--border2);border-radius:6px;background:var(--white);color:var(--ink2);cursor:pointer;font-family:'Sora',sans-serif;}
-  .refresh-btn:hover{background:var(--off);}
+/* NAV */
+nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px;height:52px;border-bottom:1px solid var(--border);background:var(--white);position:sticky;top:0;z-index:100;}
+.logo{font-size:17px;font-weight:600;}
+.logo span{color:var(--accent);}
+.nav-right{display:flex;align-items:center;gap:16px;}
+.live-indicator{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pp 2s infinite;}
+@keyframes pp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.4)}}
+.refresh-btn{font-size:13px;padding:6px 14px;border:1px solid var(--border2);border-radius:6px;background:var(--white);color:var(--ink2);cursor:pointer;font-family:'Sora',sans-serif;}
+.refresh-btn:hover{background:var(--off);}
 
-  .main{max-width:1000px;margin:0 auto;padding:32px 40px;}
+/* SHELL */
+.main{max-width:1280px;margin:0 auto;padding:28px 40px 80px;}
 
-  .stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;}
-  .stat{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px 20px;}
-  .stat-val{font-size:28px;font-weight:600;color:var(--ink);font-family:'JetBrains Mono',monospace;letter-spacing:-1px;}
-  .stat-val span{color:var(--accent);}
-  .stat-label{font-size:12px;color:var(--ink3);margin-top:4px;text-transform:uppercase;letter-spacing:0.06em;}
+/* STATS */
+.stats-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:32px;}
+.stat{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px 20px;}
+.stat-val{font-size:26px;font-weight:600;color:var(--ink);font-family:'JetBrains Mono',monospace;letter-spacing:-1px;}
+.stat-val.accent{color:var(--accent);}
+.stat-label{font-size:11px;color:var(--ink3);margin-top:4px;text-transform:uppercase;letter-spacing:.06em;}
 
-  .feed-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
-  .feed-title{font-size:20px;font-weight:600;color:var(--ink);}
-  .last-updated{font-size:12px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
+/* DASHBOARD GRID */
+.dashboard{display:grid;grid-template-columns:1fr 360px;gap:24px;align-items:start;}
 
-  .filter-tabs{display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap;}
-  .tab{font-size:13px;padding:6px 14px;border:1px solid var(--border);border-radius:6px;color:var(--ink2);cursor:pointer;background:var(--white);font-family:'Sora',sans-serif;}
-  .tab.on{background:var(--accent);color:var(--white);border-color:var(--accent);font-weight:500;}
+/* SECTION HEADERS */
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+.section-title{font-size:18px;font-weight:600;color:var(--ink);}
+.section-count{font-size:12px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
+.section-filters{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap;}
+.sf{font-size:12px;padding:4px 12px;border:1px solid var(--border);border-radius:6px;color:var(--ink2);cursor:pointer;background:var(--white);font-family:'Sora',sans-serif;transition:all .15s;}
+.sf:hover{background:var(--off);}
+.sf.on{background:var(--accent);color:var(--white);border-color:var(--accent);font-weight:500;}
 
-  .cards{display:flex;flex-direction:column;gap:16px;}
+/* SIGNAL CARDS */
+.signal-stack{display:flex;flex-direction:column;gap:12px;}
+.card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.card.no_news  {border-left:4px solid var(--purple);}
+.card.confirmed{border-left:4px solid var(--green);}
+.card.explained{border-left:4px solid var(--ink3);}
+.card.reversal {border-left:4px solid var(--red);}
+.card.uncertain{border-left:4px solid var(--amber);}
+.card.terminal {border-left:4px solid var(--slate);opacity:.7;}
 
-  .empty{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:48px;text-align:center;}
-  .empty-title{font-size:18px;font-weight:600;color:var(--ink);margin-bottom:8px;}
-  .empty-sub{font-size:14px;color:var(--ink3);line-height:1.7;max-width:400px;margin:0 auto;}
-  .empty-timer{font-size:13px;color:var(--accent);margin-top:16px;font-family:'JetBrains Mono',monospace;}
+.card-top{display:flex;align-items:center;gap:8px;padding:11px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.card.no_news  .card-top{background:var(--purple-light);}
+.card.confirmed.card-top{background:var(--green-light);}
+.card.explained .card-top{background:var(--off);}
+.card.reversal .card-top{background:var(--red-light);}
+.card.uncertain .card-top{background:var(--amber-light);}
+.card.terminal .card-top{background:var(--slate-light);}
 
-  .loading{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:48px;text-align:center;color:var(--ink3);font-size:14px;}
+.sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.card.no_news .sdot  {background:var(--purple);animation:pp 1.5s infinite;}
+.card.confirmed .sdot{background:var(--green);animation:pp 1.5s infinite;}
+.card.explained .sdot{background:var(--ink3);}
+.card.reversal .sdot {background:var(--red);animation:pp 1.5s infinite;}
+.card.uncertain .sdot{background:var(--amber);animation:pp 1.5s infinite;}
+.card.terminal .sdot {background:var(--slate);}
 
-  .card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
-  .card.no_news{border-left:4px solid var(--purple);}
-  .card.confirmed{border-left:4px solid var(--green);}
-  .card.explained{border-left:4px solid var(--ink3);}
-  .card.reversal{border-left:4px solid var(--red);}
-  .card.uncertain{border-left:4px solid var(--amber);}
-  .card.terminal{border-left:4px solid var(--slate);opacity:0.75;}
+.slabel{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;flex:1;}
+.card.no_news .slabel  {color:var(--purple);}
+.card.confirmed .slabel{color:var(--green);}
+.card.explained .slabel{color:var(--ink3);}
+.card.reversal .slabel {color:var(--red);}
+.card.uncertain .slabel{color:var(--amber);}
+.card.terminal .slabel {color:var(--slate);}
 
-  .card-top{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
-  .card.no_news .card-top{background:var(--purple-light);}
-  .card.confirmed .card-top{background:var(--green-light);}
-  .card.explained .card-top{background:var(--off);}
-  .card.reversal .card-top{background:#fff5f5;}
-  .card.uncertain .card-top{background:var(--amber-light);}
-  .card.terminal .card-top{background:var(--slate-light);}
+.cat-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.04em;background:var(--off);color:var(--ink3);border:1px solid var(--border);}
+.score-badge{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;}
+.score-extreme{background:#fef3c7;color:#92400e;}
+.score-high   {background:#dbeafe;color:#1e40af;}
+.score-medium {background:var(--off);color:var(--ink3);}
+.stime{font-size:11px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
 
-  .sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
-  .card.no_news .sdot{background:var(--purple);animation:pp 1.5s infinite;}
-  .card.confirmed .sdot{background:var(--green);animation:pp 1.5s infinite;}
-  .card.explained .sdot{background:var(--ink3);}
-  .card.reversal .sdot{background:var(--red);animation:pp 1.5s infinite;}
-  .card.uncertain .sdot{background:var(--amber);animation:pp 1.5s infinite;}
-  .card.terminal .sdot{background:var(--slate);}
-  @keyframes pp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(1.5)}}
+.card-body{padding:16px 18px;}
+.question{font-size:14px;font-weight:500;color:var(--ink);line-height:1.55;margin-bottom:12px;}
+.question a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
+.question a:hover{color:var(--accent);}
 
-  .slabel{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;}
-  .card.no_news .slabel{color:var(--purple);}
-  .card.confirmed .slabel{color:var(--green);}
-  .card.explained .slabel{color:var(--ink3);}
-  .card.reversal .slabel{color:var(--red);}
-  .card.uncertain .slabel{color:var(--amber);}
-  .card.terminal .slabel{color:var(--slate);}
+.platform-tag{font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace;margin-left:6px;vertical-align:middle;}
+.poly{background:#dbeafe;color:#1e40af;}
+.kal {background:#d1fae5;color:#065f46;}
 
-  .cat-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:4px;text-transform:uppercase;letter-spacing:0.04em;background:var(--off);color:var(--ink3);border:1px solid var(--border);}
-  .score-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:4px;font-family:'JetBrains Mono',monospace;margin-left:auto;}
-  .score-extreme{background:#fef3c7;color:#92400e;}
-  .score-high{background:#dbeafe;color:#1e40af;}
-  .score-medium{background:var(--off);color:var(--ink3);}
-  .stime{font-size:11px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
+.move-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.o-from{font-size:13px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
+.o-arr{color:var(--ink3);font-size:13px;}
+.o-to{font-size:20px;font-weight:600;font-family:'JetBrains Mono',monospace;}
+.o-badge{font-size:12px;padding:2px 9px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-weight:500;}
+.move-up  {background:#ede9fe;color:#5b21b6;}
+.move-down{background:#fef3c7;color:#92400e;}
+.move-red {background:var(--red-light);color:var(--red);}
+.o-track{flex:1;height:4px;background:var(--off);border-radius:3px;overflow:hidden;}
+.o-fill{height:100%;border-radius:3px;}
 
-  .card-body{padding:18px 20px;}
-  .question{font-size:15px;font-weight:500;color:var(--ink);line-height:1.5;margin-bottom:14px;}
-  .platform-tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;font-family:'JetBrains Mono',monospace;margin-left:8px;vertical-align:middle;}
-  .poly{background:#dbeafe;color:#1e40af;}
-  .kal{background:#d1fae5;color:#065f46;}
+.obs{padding:13px 18px;border-top:1px solid var(--border);background:var(--ink);}
+.obs-label{font-size:11px;font-weight:600;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}
+.obs-text{font-size:13px;color:rgba(255,255,255,.88);line-height:1.75;font-style:italic;}
 
-  .move-row{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
-  .o-from{font-size:14px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
-  .o-arr{color:var(--ink3);font-size:14px;}
-  .o-to{font-size:20px;font-weight:600;font-family:'JetBrains Mono',monospace;}
-  .o-badge{font-size:12px;padding:3px 10px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-weight:500;}
-  .move-up{background:#ede9fe;color:#5b21b6;}
-  .move-down{background:#fef3c7;color:#92400e;}
-  .o-track{flex:1;height:5px;background:var(--off);border-radius:3px;overflow:hidden;}
-  .o-fill{height:100%;border-radius:3px;}
+.news-section{padding:12px 18px;border-top:1px solid var(--border);}
+.ns-label{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
+.vacuum{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;background:var(--purple-light);border:1px solid #ddd6fe;border-radius:7px;}
+.vdot{width:6px;height:6px;background:var(--purple);border-radius:50%;margin-top:6px;flex-shrink:0;animation:pp 1.5s infinite;}
+.vtext{font-size:12px;color:#5b21b6;line-height:1.65;}
+.art{background:var(--off);border:1px solid var(--border);border-radius:7px;padding:11px 14px;}
+.art-src{font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;background:#dbeafe;color:#1e40af;font-family:'JetBrains Mono',monospace;display:inline-block;margin-bottom:6px;}
+.art-hl{font-size:13px;font-weight:500;color:var(--ink);line-height:1.5;}
+.art-hl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
 
-  .meta-row{display:flex;gap:20px;flex-wrap:wrap;}
-  .meta{font-size:13px;color:var(--ink3);}
-  .meta strong{color:var(--ink);font-weight:500;}
+/* CONTEXT PILL (sports) */
+.ctx-pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;margin-bottom:10px;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;}
+.ctx-live    {background:var(--red-light);color:var(--red);}
+.ctx-resolved{background:var(--slate-light);color:var(--slate);}
+.ctx-pregame {background:var(--accent-light);color:var(--accent);}
 
-  .context-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;display:inline-block;margin-bottom:10px;}
-  .ctx-ingame{background:#fef9c3;color:#854d0e;}
-  .ctx-resolved{background:#f0fdf4;color:#166534;}
-  .ctx-pregame{background:var(--accent-light);color:var(--accent);}
+/* RELATED CONTRACTS */
+.related-toggle{display:flex;align-items:center;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:12px;color:var(--ink3);cursor:pointer;user-select:none;}
+.related-toggle:hover{color:var(--ink2);}
+.chevron{transition:transform .2s;display:inline-block;font-size:10px;}
+.related-toggle.open .chevron{transform:rotate(180deg);}
+.related-list{display:none;flex-direction:column;gap:7px;margin-top:8px;}
+.related-list.open{display:flex;}
+.rel-item{background:var(--off);border:1px solid var(--border);border-radius:7px;padding:8px 12px;display:flex;align-items:center;gap:8px;}
+.rel-q{font-size:12px;color:var(--ink2);flex:1;line-height:1.4;}
+.rel-odds{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink);}
+.rel-type{font-size:11px;color:var(--ink3);font-style:italic;}
 
-  .news-section{padding:14px 20px;border-top:1px solid var(--border);}
-  .ns-label{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;}
+/* SPORTS SIDEBAR */
+.sports-panel{position:sticky;top:68px;}
+.sports-stack{display:flex;flex-direction:column;gap:10px;}
 
-  .vacuum{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:var(--purple-light);border:1px solid #ddd6fe;border-radius:8px;}
-  .vdot{width:7px;height:7px;background:var(--purple);border-radius:50%;margin-top:5px;flex-shrink:0;animation:pp 1.5s infinite;}
-  .vtext{font-size:13px;color:#5b21b6;line-height:1.7;}
+.sport-card{background:var(--white);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.sport-card.terminal{opacity:.6;}
+.sport-card.ctx-live-card  {border-left:4px solid var(--red);}
+.sport-card.ctx-pregame-card{border-left:4px solid var(--accent);}
+.sport-card.ctx-resolved-card{border-left:4px solid var(--slate);}
 
-  .art{background:var(--off);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
-  .art-src{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#dbeafe;color:#1e40af;font-family:'JetBrains Mono',monospace;display:inline-block;margin-bottom:8px;}
-  .art-hl{font-size:14px;font-weight:600;color:var(--ink);line-height:1.5;}
+.sport-top{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border);}
+.sport-cat{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
+.sport-ctx-tag{font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;margin-left:auto;font-family:'JetBrains Mono',monospace;}
+.tag-live    {background:var(--red-light);color:var(--red);}
+.tag-resolved{background:var(--slate-light);color:var(--slate);}
+.tag-pregame {background:var(--accent-light);color:var(--accent);}
 
-  .obs{padding:16px 20px;border-top:1px solid var(--border);background:var(--ink);}
-  .obs-label{font-size:11px;font-weight:600;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;}
-  .obs-text{font-size:14px;color:rgba(255,255,255,0.92);line-height:1.8;font-style:italic;}
+.sport-body{padding:12px 14px;}
+.sport-q{font-size:13px;font-weight:500;color:var(--ink);line-height:1.5;margin-bottom:10px;}
+.sport-q a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
+.sport-q a:hover{color:var(--accent);}
+.sport-move-row{display:flex;align-items:center;gap:8px;}
+.sp-from{font-size:12px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
+.sp-to{font-size:17px;font-weight:600;font-family:'JetBrains Mono',monospace;}
+.sp-to.up  {color:var(--green);}
+.sp-to.down{color:var(--amber);}
+.sp-badge{font-size:11px;padding:2px 7px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-weight:500;}
+.sp-score{font-size:11px;color:var(--ink3);font-family:'JetBrains Mono',monospace;margin-left:auto;}
+.sport-note{margin-top:7px;font-size:12px;color:var(--ink3);font-style:italic;}
 
-  .error{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:20px;text-align:center;color:var(--red);font-size:14px;margin-bottom:20px;}
+/* EMPTY / LOADING */
+.empty{background:var(--white);border:1px dashed var(--border2);border-radius:12px;padding:40px;text-align:center;}
+.empty strong{font-size:15px;font-weight:600;color:var(--ink);display:block;margin-bottom:6px;}
+.empty p{font-size:13px;color:var(--ink3);}
+.loading{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:40px;text-align:center;color:var(--ink3);font-size:13px;}
+.error{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;color:var(--red);font-size:13px;margin-bottom:16px;display:none;}
 
-  .contracts-list{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
-  .contract-item{background:var(--off);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
-  .contract-item.primary{background:var(--white);border-color:var(--border2);}
-  .bet-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;}
-  .related-contracts{display:flex;flex-direction:column;gap:8px;}
-  .related-bet{background:var(--off);border:1px solid var(--border);border-radius:8px;padding:12px 14px;}
-  .rb-question{font-size:13px;color:var(--ink2);line-height:1.5;margin-bottom:8px;}
-  .rb-meta{display:flex;align-items:center;gap:10px;}
-  .rb-odds{font-size:13px;font-weight:600;color:var(--ink);font-family:'JetBrains Mono',monospace;}
-  .rb-type{font-size:11px;color:var(--ink3);font-style:italic;}
-  .total-row{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--off);border:1px solid var(--border);border-radius:8px;}
-  .total-left{font-size:13px;color:var(--ink3);}
-  .conv-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:4px;}
-  .conv-badge.cross{background:#dbeafe;color:#1e40af;}
-  .conv-badge.same{background:#f0fdf4;color:#065f46;}
+@media(max-width:900px){
+  .dashboard{grid-template-columns:1fr;}
+  .sports-panel{position:static;}
+  .stats-bar{grid-template-columns:repeat(2,1fr);}
+  .main{padding:20px 16px 60px;}
+  nav{padding:0 16px;}
+}
 </style>
 </head>
 <body>
@@ -155,6 +197,7 @@
 <nav>
   <div class="logo">Gauge<span>Market</span></div>
   <div class="nav-right">
+    <div class="live-indicator"><div class="live-dot"></div><span id="live-label">Monitoring</span></div>
     <button class="refresh-btn" onclick="loadAll()">↻ Refresh</button>
   </div>
 </nav>
@@ -162,373 +205,338 @@
 <div class="main">
 
   <div class="stats-bar">
-    <div class="stat"><div class="stat-val" id="stat-volume">—</div><div class="stat-label">Capital in market</div></div>
+    <div class="stat"><div class="stat-val accent" id="stat-volume">—</div><div class="stat-label">Capital in market</div></div>
     <div class="stat"><div class="stat-val" id="stat-markets">—</div><div class="stat-label">Markets watched</div></div>
     <div class="stat"><div class="stat-val" id="stat-today">—</div><div class="stat-label">Signals today</div></div>
-    <div class="stat"><div class="stat-val" id="stat-high">—</div><div class="stat-label">High confidence</div></div>
+    <div class="stat"><div class="stat-val accent" id="stat-high">—</div><div class="stat-label">High confidence</div></div>
   </div>
 
-  <div class="feed-header">
-    <div class="feed-title">Intelligence feed</div>
-    <div class="last-updated" id="last-updated">—</div>
+  <div id="error-box" class="error"></div>
+
+  <div class="dashboard">
+
+    <!-- INTELLIGENCE (left) -->
+    <div>
+      <div class="section-head">
+        <div class="section-title">Intelligence feed</div>
+        <div class="section-count" id="intel-count"></div>
+        <div class="section-filters" id="intel-filters">
+          <button class="sf on" onclick="setIntelFilter('all',this)">All</button>
+          <button class="sf" onclick="setIntelFilter('geopolitical',this)">Geo</button>
+          <button class="sf" onclick="setIntelFilter('macro',this)">Macro</button>
+          <button class="sf" onclick="setIntelFilter('political',this)">Political</button>
+          <button class="sf" onclick="setIntelFilter('crypto',this)">Crypto</button>
+          <button class="sf" onclick="setIntelFilter('commodities',this)">Commodities</button>
+        </div>
+      </div>
+      <div class="signal-stack" id="intel-feed"><div class="loading">Loading signals…</div></div>
+    </div>
+
+    <!-- SPORTS (right sidebar) -->
+    <div class="sports-panel">
+      <div class="section-head">
+        <div class="section-title">Sports</div>
+        <div class="section-count" id="sports-count"></div>
+        <div class="section-filters" id="sports-filters">
+          <button class="sf on" onclick="setSportsFilter('all',this)">All</button>
+          <button class="sf" onclick="setSportsFilter('live',this)">Live</button>
+          <button class="sf" onclick="setSportsFilter('pregame',this)">Pre-game</button>
+        </div>
+      </div>
+      <div class="sports-stack" id="sports-feed"><div class="loading">Loading…</div></div>
+    </div>
+
   </div>
-
-  <div class="filter-tabs">
-    <span class="tab on" onclick="setCategory('all', this)">All</span>
-    <span class="tab" onclick="setCategory('political', this)">Political</span>
-    <span class="tab" onclick="setCategory('macro', this)">Macro</span>
-    <span class="tab" onclick="setCategory('geopolitical', this)">Geopolitical</span>
-    <span class="tab" onclick="setCategory('sports', this)">Sports</span>
-    <span class="tab" onclick="setCategory('esports', this)">Esports</span>
-    <span class="tab" onclick="setCategory('crypto', this)">Crypto</span>
-    <span class="tab" onclick="setCategory('other', this)">Other</span>
-  </div>
-
-  <div id="error-box" style="display:none"></div>
-  <div class="cards" id="feed"></div>
-
 </div>
 
 <script>
-  const API = 'https://web-production-bde4.up.railway.app'
-  let currentCategory = 'all'
+const API = 'https://web-production-bde4.up.railway.app'
+const INTEL_CATS  = new Set(['geopolitical','macro','political','crypto','commodities','other'])
+const SPORTS_CATS = new Set(['sports','esports'])
+let allSignals = [], intelFilter = 'all', sportsFilter = 'all'
 
-  function setCategory(cat, el) {
-    currentCategory = cat
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'))
-    el.classList.add('on')
-    loadFeed()
+function timeAgo(d) {
+  const ts = d && !d.endsWith('Z') ? d + 'Z' : d
+  const s  = (Date.now() - new Date(ts)) / 1000
+  if (s < 60)    return Math.floor(s) + 's ago'
+  if (s < 3600)  return Math.floor(s/60) + 'm ago'
+  if (s < 86400) return Math.floor(s/3600) + 'h ago'
+  return Math.floor(s/86400) + 'd ago'
+}
+function fmtVol(v) {
+  if (!v)      return '$0'
+  if (v >= 1e9) return '$' + (v/1e9).toFixed(1) + 'B'
+  if (v >= 1e6) return '$' + (v/1e6).toFixed(1) + 'M'
+  if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'K'
+  return '$' + v.toFixed(0)
+}
+function pct(v) { return Math.round(v * 100) }
+async function fetchR(url, n=3) {
+  for (let i=0; i<n; i++) {
+    try { const r = await fetch(url); if (!r.ok) throw new Error(r.status); return await r.json() }
+    catch(e) { if (i===n-1) throw e; await new Promise(r=>setTimeout(r,2000)) }
   }
+}
 
-  function timeAgo(dateStr) {
-    // Timestamps from the API are UTC — append Z if missing so Date parses correctly
-    const ts = dateStr && !dateStr.endsWith('Z') ? dateStr + 'Z' : dateStr
-    const diff = (Date.now() - new Date(ts)) / 1000
-    if (diff < 60) return `${Math.floor(diff)}s ago`
-    if (diff < 3600) return `${Math.floor(diff/60)}m ago`
-    if (diff < 86400) return `${Math.floor(diff/3600)}h ago`
-    return `${Math.floor(diff/86400)}d ago`
+// ── INTELLIGENCE HELPERS ──────────────────────────────────────────────────
+
+function cardClass(s) {
+  if (s.state === 'terminal') return 'terminal'
+  if (s.is_reversal)          return 'reversal'
+  return s.state || 'uncertain'
+}
+
+function stateLabel(s) {
+  if (s.state === 'terminal')  return 'Match concluded · Market resolved'
+  if (s.is_reversal)           return 'Reversal · Contract moved opposite direction'
+  if (s.is_sports && s.sports_context === 'large_ingame_move')    return 'Large in-game move · Live event'
+  if (s.is_sports && s.sports_context === 'moderate_ingame_move') return 'In-game move · Live event'
+  if (s.is_sports && s.sports_context === 'pre_game_move')        return 'Pre-game shift · No news'
+  if (s.category === 'geopolitical' && s.state === 'no_news')     return 'Geopolitical shift · No public news'
+  if (s.category === 'geopolitical' && s.state === 'confirmed')   return 'Geopolitical signal · Capital moved before news'
+  if ((s.category==='macro'||s.category==='political') && s.state==='no_news') return 'No news · High priority'
+  if (s.state === 'no_news')   return 'Inconsistent · No public news'
+  if (s.state === 'confirmed') return 'News broke after position · Capital moved first'
+  if (s.state === 'explained') return 'News already existed · May explain the move'
+  if (s.state === 'uncertain') return 'News found · Timing unclear'
+  return 'Signal detected'
+}
+
+function moveColor(s) {
+  if (s.state === 'terminal') return 'var(--slate)'
+  if (s.is_reversal)          return 'var(--red)'
+  if (s.state === 'no_news')  return 'var(--purple)'
+  return s.direction === 'YES' ? 'var(--green)' : 'var(--amber)'
+}
+
+function moveBadgeClass(s) {
+  if (s.is_reversal)         return 'move-red'
+  if (s.state === 'no_news') return 'move-up'
+  return s.direction === 'YES' ? 'move-up' : 'move-down'
+}
+
+function scoreClass(c) {
+  if (c === 'extreme') return 'score-extreme'
+  if (c === 'high')    return 'score-high'
+  return 'score-medium'
+}
+
+function buildObservation(s) {
+  const prev = pct(s.prev_odds), curr = pct(s.current_odds), move = pct(s.price_move)
+  const rel  = (s.related_same_event||0) + (s.related_cross_event||0)
+
+  if (s.state === 'terminal') {
+    const outcome = curr >= 98 ? 'YES' : 'NO'
+    return `"${s.platform} contract settled at ${curr}% — market resolved to ${outcome}. This reflects match conclusion, not a live information signal."`
   }
-
-  // -------------------------------------------------------------------------
-  // Sports context helpers
-  // -------------------------------------------------------------------------
-
-  function sportsContextPill(s) {
-    if (!s.is_sports) return ''
-    const ctx = s.sports_context
-    if (!ctx) return ''
-
-    if (ctx === 'match_resolved_yes' || ctx === 'match_resolved_no') {
-      return '<span class="context-pill ctx-resolved">Match concluded</span>'
-    }
-    if (ctx === 'large_ingame_move' || ctx === 'moderate_ingame_move') {
-      return '<span class="context-pill ctx-ingame">In-game move</span>'
-    }
-    if (ctx === 'pre_game_move') {
-      return '<span class="context-pill ctx-pregame">Pre-game</span>'
-    }
-    return ''
+  if (s.is_reversal) {
+    const pd = s.reversal_from === 'YES' ? 'up' : 'down'
+    const nd = s.direction === 'YES' ? 'up' : 'down'
+    return `"Contract previously moved ${pd} ${s.reversal_prev_move||move} points, now reversing ${nd} ${move} points. Sharp reversals can indicate informed positioning on both sides — or a correction of an earlier overreaction."`
   }
+  if (s.category === 'geopolitical' && s.state === 'no_news')
+    return `"${move}pt shift on a geopolitical contract with no public news. Geo markets move slowly by nature — this speed is atypical and may reflect off-channel diplomatic or intelligence signals."`
+  if (s.category === 'macro' && s.state === 'no_news')
+    return `"Macro contract moved ${prev}% → ${curr}%${rel>0?` across ${rel+1} related markets`:''} with no news. Unexplained macro moves are high-priority — they often precede central bank leaks or economic data."`
+  if (s.state === 'confirmed')
+    return `"${s.platform} contract moved ${move} points before news confirmation. Capital appeared to price in the information early."`
+  if (s.state === 'no_news')
+    return `"${s.platform} contract moved from ${prev}% to ${curr}% — a ${move} point shift${rel>0?` across ${rel+1} related contracts`:''} with no public news found."`
+  if (s.state === 'explained')
+    return `"News pre-dates this move. The market may be catching up to existing public information."`
+  return `"Signal detected and tracked. ${s.platform} contract moved ${move} points. Full record logged."`
+}
 
-  // -------------------------------------------------------------------------
-  // Signal labels — category-aware
-  // -------------------------------------------------------------------------
+function renderIntelCard(s) {
+  const color  = moveColor(s)
+  const isUp   = s.direction === 'YES'
+  const move   = pct(s.price_move)
+  const curr   = pct(s.current_odds)
+  const prev   = pct(s.prev_odds)
+  const sign   = isUp ? '+' : '−'
+  const cc     = cardClass(s)
 
-  function signalLabel(s) {
-    if (s.state === 'terminal') return 'Match concluded · Market resolved'
-    if (s.is_reversal) return 'Reversal · Contract moved opposite direction'
-
-    // Sports-specific labels use the sports_context field
-    if (s.is_sports && s.sports_context) {
-      if (s.sports_context === 'large_ingame_move')    return 'Large in-game move · Live event'
-      if (s.sports_context === 'moderate_ingame_move') return 'In-game move · Live event'
-      if (s.sports_context === 'pre_game_move')        return 'Pre-game shift · No news'
-    }
-
-    // Geopolitical contracts explain why a slow move matters
-    if (s.category === 'geopolitical') {
-      if (s.state === 'no_news') return 'Geopolitical shift · No public news'
-      if (s.state === 'confirmed') return 'Geopolitical signal · Capital moved before news'
-    }
-
-    // Default labels
-    if (s.state === 'no_news')    return 'Inconsistent · No public news'
-    if (s.state === 'confirmed')  return 'News broke after position · Capital moved first'
-    if (s.state === 'explained')  return 'News already existed · May explain the move'
-    if (s.state === 'uncertain')  return 'News found · Timing unclear'
-    return 'Signal detected'
-  }
-
-  function scoreClass(confidence) {
-    if (confidence === 'extreme') return 'score-extreme'
-    if (confidence === 'high')    return 'score-high'
-    return 'score-medium'
-  }
-
-  function moveColor(signal) {
-    if (signal.state === 'terminal') return 'var(--slate)'
-    if (signal.is_reversal)          return '#e02424'
-    if (signal.state === 'no_news')  return '#7c3aed'
-    if (signal.direction === 'YES')  return '#0e9f6e'
-    return '#c27803'
-  }
-
-  // -------------------------------------------------------------------------
-  // Observation text — category-aware narrative
-  // -------------------------------------------------------------------------
-
-  function buildObservation(s) {
-    const prev    = Math.round(s.prev_odds * 100)
-    const curr    = Math.round(s.current_odds * 100)
-    const move    = Math.round(s.price_move * 100)
-    const platform = s.platform
-    const related  = s.related_same_event + s.related_cross_event
-
-    // --- Terminal sports ---
-    if (s.state === 'terminal') {
-      const outcome = curr >= 98 ? 'YES (win/qualification)' : 'NO (loss/elimination)'
-      return `"${platform} contract settled at ${curr}% — market has resolved to ${outcome}. This reflects match conclusion, not a live information signal."`
-    }
-
-    // --- Reversal ---
-    if (s.is_reversal) {
-      const prevDir = s.reversal_from === 'YES' ? 'up' : 'down'
-      const nowDir  = s.direction === 'YES' ? 'up' : 'down'
-      return `"Contract previously moved ${prevDir} ${s.reversal_prev_move} points, now reversing ${nowDir} ${move} points. Sharp reversals on the same contract can indicate informed positioning on both sides — or a correction of an earlier overreaction."`
-    }
-
-    // --- Sports: live game ---
-    if (s.is_sports) {
-      const ctx = s.sports_context
-      if (ctx === 'large_ingame_move') {
-        return `"${platform} sports contract moved ${move} points during the live event${related > 0 ? ` across ${related + 1} related contracts` : ''}. A move of this size mid-game typically reflects a score change, red card, injury to a key player, or other game-changing event — not necessarily an information signal."`
-      }
-      if (ctx === 'moderate_ingame_move') {
-        return `"${platform} sports contract moved ${move} points while the event is live. Moderate in-game moves are normal; check the live score to confirm whether this reflects a game event or genuine market uncertainty."`
-      }
-      if (ctx === 'pre_game_move') {
-        return `"${platform} pre-game contract shifted ${move} points from ${prev}% to ${curr}%${s.state === 'no_news' ? ' with no public news explaining the move. Pre-game moves without news can reflect lineup leaks, injury rumours, or sharp money' : ''}."`
-      }
-    }
-
-    // --- Geopolitical ---
-    if (s.category === 'geopolitical') {
-      if (s.state === 'no_news') {
-        return `"${platform} geopolitical contract moved from ${prev}% to ${curr}% — a ${move} point shift with no public news. Geopolitical contracts move slowly by nature; a ${move} point move in a short window is significant and may reflect off-channel information."`
-      }
-      if (s.state === 'confirmed') {
-        return `"${platform} geopolitical contract moved ${move} points before news confirmation. Capital appeared to price in this development ahead of public reporting — consistent with informed positioning on a slow-moving policy or diplomatic signal."`
-      }
-    }
-
-    // --- Macro / political ---
-    if (s.category === 'macro' || s.category === 'political') {
-      if (s.state === 'no_news') {
-        return `"${platform} ${s.category} contract moved from ${prev}% to ${curr}%${related > 0 ? ` across ${related + 1} related contracts` : ''}. No public news found. Macro/political contracts with no-news moves are high-priority signals — they often precede central bank leaks, policy announcements, or breaking geopolitical events."`
-      }
-    }
-
-    // --- Default ---
-    if (s.state === 'no_news') {
-      return `"${platform} contract moved from ${prev}% to ${curr}% — a ${move} point shift${related > 0 ? ` across ${related + 1} related contracts` : ''}. No public news found to explain this movement."`
-    }
-    if (s.state === 'confirmed') {
-      return `"${platform} contract moved ${move} points before news confirmation. The move preceded the article by a meaningful window — capital appeared to price in the information early."`
-    }
-    return `"Signal detected and tracked through to resolution. ${platform} contract moved ${move} points. Full record logged."`
-  }
-
-  // -------------------------------------------------------------------------
-  // Related contracts
-  // -------------------------------------------------------------------------
-
-  function renderRelatedContracts(contracts) {
-    if (!contracts || contracts.length === 0) return ''
-    return '<div class="related-contracts">' +
-      contracts.map(c => {
-        const curr = Math.round(c.odds * 100)
-        const prev = c.prev_odds !== undefined ? Math.round(c.prev_odds * 100) : curr
-        const moved = prev !== curr
-        const moveAmt = curr - prev
-        const moveStr = moved ? (moveAmt > 0 ? '+' + moveAmt : moveAmt) + '%' : ''
-        const moveCol = moveAmt > 0 ? '#0e9f6e' : '#c27803'
-        return '<div class="related-bet">' +
-          '<div class="rb-question">"' + c.question + '"</div>' +
-          '<div class="rb-meta">' +
-            '<span class="platform-tag ' + (c.platform === 'Polymarket' ? 'poly' : 'kal') + '">' + c.platform + '</span>' +
-            (curr > 0 ? '<span class="rb-odds">' + curr + '%</span>' : '') +
-            (moved ? '<span class="rb-move" style="color:' + moveCol + ';font-size:12px;font-family:JetBrains Mono,monospace;">' + moveStr + '</span>' : '') +
-            '<span class="rb-type">' + (
-              c.type === 'causal'         ? 'Causally linked' :
-              c.type === 'cross_event'    ? 'Related event' :
-              c.type === 'cross_platform' ? 'Cross-platform' :
-              'Same event'
-            ) + '</span>' +
-          '</div>' +
-        '</div>'
-      }).join('') +
-    '</div>'
-  }
-
-  // -------------------------------------------------------------------------
-  // Card renderer
-  // -------------------------------------------------------------------------
-
-  function renderCard(s) {
-    const color         = moveColor(s)
-    const isUp          = s.direction === 'YES'
-    const moveBadgeClass = s.state === 'no_news' ? 'move-up' : (isUp ? 'move-up' : 'move-down')
-    const moveSign      = isUp ? '+' : '-'
-    const moveAmt       = Math.round(s.price_move * 100)
-    const fillWidth     = Math.round(s.current_odds * 100)
-    const related       = s.related_contracts || []
-    const totalContracts = 1 + related.length
-    const platforms     = [...new Set([s.platform, ...related.map(r => r.platform)])]
-    const crossPlatform = platforms.length > 1
-
-    const newsHtml = s.state === 'terminal'
-      ? '' // no news section for resolved contracts
-      : s.news_vacuum
-        ? '<div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div>'
-        : s.news_headline
-          ? '<div class="art"><span class="art-src">' + (s.news_source || 'Yahoo Finance') + '</span><div class="art-hl"><a href="' + s.news_url + '" target="_blank" rel="noopener noreferrer" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);">' + s.news_headline + '</a></div></div>'
-          : ''
-
-    const convergenceBadge = crossPlatform
-      ? '<span class="conv-badge cross">Cross-platform</span>'
-      : totalContracts > 2
-        ? '<span class="conv-badge same">Multiple contracts</span>'
+  const newsHtml = s.state === 'terminal' ? '' :
+    s.news_vacuum
+      ? `<div class="news-section"><div class="ns-label">News check</div><div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div></div>`
+      : s.news_headline
+        ? `<div class="news-section"><div class="ns-label">News check</div><div class="art"><span class="art-src">${s.news_source||'News'}</span><div class="art-hl"><a href="${s.news_url}" target="_blank" rel="noopener">${s.news_headline}</a></div></div></div>`
         : ''
 
-    const cardClass = s.state === 'terminal' ? 'terminal' : (s.is_reversal ? 'reversal' : s.state)
-    const contextPill = sportsContextPill(s)
+  const related = Array.isArray(s.related_contracts) ? s.related_contracts : []
+  const relHtml = related.length > 0 ? `
+    <div class="related-toggle" onclick="toggleRelated(this)">
+      <span class="chevron">▾</span>&nbsp;${related.length} related contract${related.length>1?'s':''}
+    </div>
+    <div class="related-list">
+      ${related.map(r=>`<div class="rel-item">
+        <div class="rel-q">"${r.question}"</div>
+        ${r.odds>0?`<div class="rel-odds">${Math.round(r.odds*100)}%</div>`:''}
+        <div class="rel-type">${r.type==='causal'?'Causally linked':r.type==='cross_event'?'Related event':'Same event'}</div>
+      </div>`).join('')}
+    </div>` : ''
 
-    return '<div class="card ' + cardClass + '">' +
-      '<div class="card-top">' +
-        '<div class="sdot"></div>' +
-        '<span class="slabel">' + signalLabel(s) + '</span>' +
-        '<span class="cat-badge">' + s.category + '</span>' +
-        convergenceBadge +
-        '<span class="score-badge ' + scoreClass(s.confidence) + '">Score ' + s.score + '</span>' +
-        '<span class="stime">' + timeAgo(s.detected_at) + '</span>' +
-      '</div>' +
-      '<div class="card-body">' +
-        (contextPill ? '<div style="margin-bottom:10px">' + contextPill + '</div>' : '') +
-        '<div class="contracts-list">' +
-          '<div class="contract-item primary">' +
-            '<div class="bet-top">' +
-              '<div class="question">' +
-                (s.market_url
-                  ? '<a href="' + s.market_url + '" target="_blank" rel="noopener noreferrer" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);">"' + s.question + '"</a>'
-                  : '"' + s.question + '"') +
-              '</div>' +
-              '<span class="platform-tag ' + (s.platform === 'Polymarket' ? 'poly' : 'kal') + '">' + s.platform + '</span>' +
-            '</div>' +
-            '<div class="move-row">' +
-              '<span class="o-from">' + Math.round(s.prev_odds * 100) + '%</span>' +
-              '<span class="o-arr">to</span>' +
-              '<span class="o-to" style="color:' + color + '">' + Math.round(s.current_odds * 100) + '%</span>' +
-              '<span class="o-badge ' + moveBadgeClass + '">' + moveSign + moveAmt + '%</span>' +
-              '<div class="o-track"><div class="o-fill" style="width:' + fillWidth + '%;background:' + color + '"></div></div>' +
-            '</div>' +
-          '</div>' +
-          (related.length > 0 ? renderRelatedContracts(related) : '') +
-        '</div>' +
-        (totalContracts > 1 ? (
-          '<div class="total-row">' +
-            '<span class="total-left">' + totalContracts + ' related contract' + (totalContracts > 1 ? 's' : '') + ' · ' + platforms.join(' + ') + (crossPlatform ? ' · Cross-platform' : '') + '</span>' +
-          '</div>'
-        ) : '') +
-      '</div>' +
-      (newsHtml ? '<div class="news-section"><div class="ns-label">News check</div>' + newsHtml + '</div>' : '') +
-      '<div class="obs">' +
-        '<div class="obs-label">What\'s going on here</div>' +
-        '<div class="obs-text">' + buildObservation(s) + '</div>' +
-      '</div>' +
-    '</div>'
-  }
-
-  function renderEmpty() {
-    return `
-      <div class="empty">
-        <div class="empty-title">No signals yet</div>
-        <div class="empty-sub">The poller is running and monitoring Polymarket every 5 minutes. Signals appear when unusual price movements are detected.</div>
-        <div class="empty-timer">Next poll in ~5 minutes</div>
+  return `<div class="card ${cc}">
+    <div class="card-top">
+      <div class="sdot"></div>
+      <span class="slabel">${stateLabel(s)}</span>
+      <span class="cat-badge">${s.category}</span>
+      <span class="score-badge ${scoreClass(s.confidence)}">Score ${s.score}</span>
+      <span class="stime">${timeAgo(s.detected_at)}</span>
+    </div>
+    <div class="card-body">
+      <div class="question">
+        ${s.market_url?`<a href="${s.market_url}" target="_blank" rel="noopener">"${s.question}"</a>`:`"${s.question}"`}
+        <span class="platform-tag poly">${s.platform}</span>
       </div>
-    `
+      <div class="move-row">
+        <span class="o-from">${prev}%</span>
+        <span class="o-arr">to</span>
+        <span class="o-to" style="color:${color}">${curr}%</span>
+        <span class="o-badge ${moveBadgeClass(s)}">${sign}${move}%</span>
+        <div class="o-track"><div class="o-fill" style="width:${curr}%;background:${color}"></div></div>
+      </div>
+      ${relHtml}
+    </div>
+    ${newsHtml}
+    <div class="obs">
+      <div class="obs-label">Something's going on here</div>
+      <div class="obs-text">${buildObservation(s)}</div>
+    </div>
+  </div>`
+}
+
+// ── SPORTS HELPERS ────────────────────────────────────────────────────────
+
+function sportsCtxTag(ctx) {
+  if (!ctx) return ''
+  if (ctx==='match_resolved_yes'||ctx==='match_resolved_no') return '<span class="sport-ctx-tag tag-resolved">Resolved</span>'
+  if (ctx==='large_ingame_move'||ctx==='moderate_ingame_move') return '<span class="sport-ctx-tag tag-live">Live</span>'
+  return '<span class="sport-ctx-tag tag-pregame">Pre-game</span>'
+}
+function sportsCardClass(ctx) {
+  if (!ctx) return ''
+  if (ctx==='match_resolved_yes'||ctx==='match_resolved_no') return 'ctx-resolved-card'
+  if (ctx==='large_ingame_move'||ctx==='moderate_ingame_move') return 'ctx-live-card'
+  return 'ctx-pregame-card'
+}
+function sportsNote(s) {
+  const move = pct(s.price_move), ctx = s.sports_context
+  if (ctx==='match_resolved_yes')  return 'Market settled — YES won.'
+  if (ctx==='match_resolved_no')   return 'Market settled — NO won.'
+  if (ctx==='large_ingame_move')   return `${move}pt in-game move — check live score.`
+  if (ctx==='moderate_ingame_move')return `${move}pt shift while live.`
+  if (ctx==='pre_game_move'&&s.state==='no_news') return 'Pre-game shift with no public news.'
+  return ''
+}
+
+function renderSportsCard(s) {
+  const isUp = s.direction === 'YES'
+  const curr = pct(s.current_odds), prev = pct(s.prev_odds), move = pct(s.price_move)
+  const sign = isUp ? '+' : '−'
+  const ctx  = s.sports_context || ''
+  const note = sportsNote(s)
+  return `<div class="sport-card ${s.is_terminal?'terminal':''} ${sportsCardClass(ctx)}">
+    <div class="sport-top">
+      <span class="sport-cat">${s.category}</span>
+      ${sportsCtxTag(ctx)}
+    </div>
+    <div class="sport-body">
+      <div class="sport-q">
+        ${s.market_url?`<a href="${s.market_url}" target="_blank" rel="noopener">"${s.question}"</a>`:`"${s.question}"`}
+      </div>
+      <div class="sport-move-row">
+        <span class="sp-from">${prev}%</span>
+        <span class="sp-to ${isUp?'up':'down'}">${curr}%</span>
+        <span class="sp-badge ${isUp?'move-up':'move-down'}">${sign}${move}%</span>
+        <span class="sp-score">Score ${s.score}</span>
+      </div>
+      ${note?`<div class="sport-note">${note}</div>`:''}
+    </div>
+  </div>`
+}
+
+// ── SHARED ────────────────────────────────────────────────────────────────
+
+function toggleRelated(el) {
+  el.classList.toggle('open')
+  el.nextElementSibling.classList.toggle('open')
+}
+function setIntelFilter(cat, el) {
+  intelFilter = cat
+  document.querySelectorAll('#intel-filters .sf').forEach(b=>b.classList.remove('on'))
+  el.classList.add('on')
+  renderIntel()
+}
+function setSportsFilter(f, el) {
+  sportsFilter = f
+  document.querySelectorAll('#sports-filters .sf').forEach(b=>b.classList.remove('on'))
+  el.classList.add('on')
+  renderSports()
+}
+
+function renderIntel() {
+  const el = document.getElementById('intel-feed')
+  let sigs = allSignals.filter(s => INTEL_CATS.has(s.category))
+  if (intelFilter !== 'all') sigs = sigs.filter(s => s.category === intelFilter)
+  // no_news signals float to top, then by score
+  sigs.sort((a,b) => {
+    const au = a.state==='no_news'?1:0, bu = b.state==='no_news'?1:0
+    return au!==bu ? bu-au : b.score-a.score
+  })
+  document.getElementById('intel-count').textContent = sigs.length + ' signal' + (sigs.length!==1?'s':'')
+  el.innerHTML = sigs.length
+    ? sigs.map(renderIntelCard).join('')
+    : `<div class="empty"><strong>No signals yet</strong><p>Nothing flagged in this category. The poller runs every 5 minutes.</p></div>`
+}
+
+function renderSports() {
+  const el = document.getElementById('sports-feed')
+  let sigs = allSignals.filter(s => SPORTS_CATS.has(s.category))
+  if (sportsFilter==='live')    sigs = sigs.filter(s=>s.sports_context==='large_ingame_move'||s.sports_context==='moderate_ingame_move')
+  if (sportsFilter==='pregame') sigs = sigs.filter(s=>s.sports_context==='pre_game_move')
+  // resolved cards sink to bottom
+  sigs.sort((a,b) => {
+    const ar=a.is_terminal?1:0, br=b.is_terminal?1:0
+    return ar!==br ? ar-br : b.score-a.score
+  })
+  document.getElementById('sports-count').textContent = sigs.length + ' signal' + (sigs.length!==1?'s':'')
+  el.innerHTML = sigs.length
+    ? sigs.map(renderSportsCard).join('')
+    : `<div class="empty"><strong>No sports signals</strong><p>No unusual movements detected yet.</p></div>`
+}
+
+async function loadStats() {
+  try {
+    const d = await fetchR(`${API}/stats`)
+    document.getElementById('stat-volume').textContent  = fmtVol(d.total_volume_monitored)
+    document.getElementById('stat-markets').textContent = (d.market_count??0).toLocaleString()
+    document.getElementById('stat-today').textContent   = d.today ?? 0
+    document.getElementById('stat-high').textContent    = d.high_confidence ?? 0
+  } catch(e) {}
+}
+
+async function loadFeed() {
+  try {
+    const d = await fetchR(`${API}/feed`)
+    document.getElementById('error-box').style.display = 'none'
+    allSignals = d.feed || []
+    if (allSignals.length > 0)
+      document.getElementById('live-label').textContent = 'Updated ' + timeAgo(allSignals[0].detected_at)
+    renderIntel()
+    renderSports()
+  } catch(e) {
+    const b = document.getElementById('error-box')
+    b.style.display = 'block'
+    b.textContent = `Could not connect to API at ${API}. Check Railway is running.`
+    document.getElementById('intel-feed').innerHTML = ''
+    document.getElementById('sports-feed').innerHTML = ''
   }
+}
 
-  function formatVolume(v) {
-    if (!v) return '$0'
-    if (v >= 1_000_000_000) return '$' + (v / 1_000_000_000).toFixed(1) + 'B'
-    if (v >= 1_000_000)     return '$' + (v / 1_000_000).toFixed(1) + 'M'
-    if (v >= 1_000)         return '$' + (v / 1_000).toFixed(0) + 'K'
-    return '$' + v.toFixed(0)
-  }
-
-  async function fetchWithRetry(url, retries = 3, delayMs = 2000) {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const res = await fetch(url)
-        if (!res.ok) throw new Error('HTTP ' + res.status)
-        return await res.json()
-      } catch(e) {
-        if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs))
-        else throw e
-      }
-    }
-  }
-
-  async function loadStats() {
-    try {
-      const data = await fetchWithRetry(`${API}/stats`)
-      document.getElementById('stat-volume').textContent  = formatVolume(data.total_volume_monitored)
-      document.getElementById('stat-markets').textContent = (data.market_count ?? 0).toLocaleString()
-      document.getElementById('stat-today').textContent   = data.today ?? 0
-      document.getElementById('stat-high').innerHTML      = `<span>${data.high_confidence ?? 0}</span>`
-    } catch(e) { /* silently fail — stats are decorative */ }
-  }
-
-  async function loadFeed() {
-    const feed = document.getElementById('feed')
-    feed.innerHTML = '<div class="loading">Loading signals...</div>'
-
-    try {
-      const url = currentCategory === 'all'
-        ? `${API}/feed`
-        : `${API}/feed?category=${currentCategory}`
-
-      const data = await fetchWithRetry(url)
-      document.getElementById('error-box').style.display = 'none'
-
-      if (!data.feed || data.feed.length === 0) {
-        document.getElementById('last-updated').textContent = 'No signals yet'
-        feed.innerHTML = renderEmpty()
-        return
-      }
-
-      feed.innerHTML = data.feed.map(renderCard).join('')
-
-      const latest = data.feed[0].detected_at
-      document.getElementById('last-updated').textContent = `Most recent signal ${timeAgo(latest)}`
-    } catch(e) {
-      document.getElementById('error-box').style.display = 'block'
-      document.getElementById('error-box').innerHTML =
-        `<div class="error">Could not connect to API at ${API}. Check Railway is running.</div>`
-      feed.innerHTML = ''
-    }
-  }
-
-  async function loadAll() {
-    await Promise.all([loadStats(), loadFeed()])
-  }
-
-  // Auto-refresh every 5 mins — single interval, keeps Railway web service warm
-  setInterval(loadAll, 5 * 60 * 1000)
-
-  loadAll()
+async function loadAll() { await Promise.all([loadStats(), loadFeed()]) }
+setInterval(loadAll, 5 * 60 * 1000)
+loadAll()
 </script>
-
 </body>
 </html>
