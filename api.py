@@ -84,18 +84,14 @@ def serve_frontend():
     return FileResponse("frontend.html")
 
 @app.get("/feed")
-def get_feed(
-    limit: int = Query(default=20, le=50),
-    category: str = Query(default=None)
-):
-    # Fetch more than needed so deduplication doesn't leave feed empty
+def get_feed(category: str = Query(default=None)):
+    # With lean 48h storage, just return everything — never more than ~200 rows
     signals = get_signals_filtered(
         min_score=50,
         category=category,
-        limit=100
+        limit=500  # effectively no limit
     )
-    # Deduplicate then trim to limit
-    signals = deduplicate_signals(signals)[:limit]
+    signals = deduplicate_signals(signals)
     return {
         "feed": [enrich_signal(s) for s in signals],
         "count": len(signals),

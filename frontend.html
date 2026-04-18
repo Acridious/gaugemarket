@@ -364,8 +364,8 @@
 
     try {
       const url = currentCategory === 'all'
-        ? `${API}/feed?limit=20`
-        : `${API}/feed?limit=20&category=${currentCategory}`
+        ? `${API}/feed`
+        : `${API}/feed?category=${currentCategory}`
 
       const res = await fetch(url)
       const data = await res.json()

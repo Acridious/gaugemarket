@@ -294,22 +294,50 @@ def get_signal_by_id(signal_id):
 def get_recent_signals(limit=20):
     return get_signals_filtered(min_score=0, limit=limit)
 
-def cleanup_old_snapshots(hours=3):
-    """Delete snapshots older than N hours — keeps DB small.
-    
-    Timestamp stored as TEXT so we compare as text using ISO format.
-    cutoff = datetime N hours ago formatted as ISO string.
+def cleanup_old_data():
     """
+    Lean storage strategy — no paying customers yet so keep DB tiny.
+
+    Signals:   keep last 48 hours only
+    Snapshots: keep last 2 hours only
+    Candidates: keep last 48 hours only
+
+    Runs every hour from the poller.
+    Timestamps stored as TEXT (ISO format) so compare as strings.
+    """
+    from datetime import timedelta
+
+    now = datetime.now()
+    snapshot_cutoff = (now - timedelta(hours=2)).isoformat()
+    signal_cutoff   = (now - timedelta(hours=48)).isoformat()
+    candidate_cutoff = (now - timedelta(hours=48)).isoformat()
+
     conn = get_connection()
     try:
-        cutoff = (datetime.now() - 
-                  __import__('datetime').timedelta(hours=hours)
-                  ).isoformat()
+        # Delete old snapshots — only need last 2h for movement detection
         conn.run(
             "DELETE FROM snapshots WHERE timestamp < :cutoff",
-            cutoff=cutoff
+            cutoff=snapshot_cutoff
         )
-        print(f"Cleaned up old snapshots (kept last {hours}h)")
+
+        # Delete old signals — only show last 48h in feed
+        conn.run(
+            "DELETE FROM signals WHERE detected_at < :cutoff",
+            cutoff=signal_cutoff
+        )
+
+        # Delete old validated candidates — no longer needed
+        conn.run(
+            "DELETE FROM cross_event_candidates "
+            "WHERE validated = 1 AND detected_at < :cutoff",
+            cutoff=candidate_cutoff
+        )
+
+        # Count what's left
+        sig_count = conn.run("SELECT COUNT(*) FROM signals")[0][0]
+        snap_count = conn.run("SELECT COUNT(*) FROM snapshots")[0][0]
+        print(f"Cleanup done — {sig_count} signals, {snap_count} snapshots kept")
+
     except Exception as e:
         print(f"Cleanup error (non-fatal): {e}")
     finally:
