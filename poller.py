@@ -87,6 +87,50 @@ def fetch_polymarket_events():
     return all_events
 
 
+# Tags that indicate contracts with no information edge — skip entirely.
+# Weather moves on public forecast data. Entertainment is pure opinion.
+# Science/space moves on public announcements. None have an insider trading angle.
+_POLY_SKIP_TAGS = {
+    'weather', 'climate',
+    'entertainment', 'awards', 'oscars', 'emmys', 'grammys', 'bafta',
+    'tv', 'television', 'film', 'movies', 'music', 'celebrity',
+    'science', 'space', 'nasa', 'astronomy',
+    'reality tv', 'reality show',
+}
+
+# Fast keyword check for skip categories — used when tags aren't conclusive
+_SKIP_QUESTION_PATTERNS = [
+    # Weather
+    'temperature', 'rainfall', 'snowfall', 'hurricane', 'tornado',
+    'inches of rain', 'inches of snow', 'degrees fahrenheit', 'degrees celsius',
+    'weather', 'forecast',
+    # Awards / entertainment
+    'oscar', 'academy award', 'emmy', 'grammy', 'bafta', 'golden globe',
+    'box office', 'will win best', 'best picture', 'best actor', 'best actress',
+    'best director', 'best album', 'best song',
+    # Reality TV
+    'bachelor', 'bachelorette', 'survivor', 'big brother', 'idol',
+    'dancing with the stars', 'x factor',
+    # Space / science (low signal)
+    'rocket launch', 'will nasa', 'will spacex launch',
+    'will the sun', 'solar flare',
+]
+
+def _should_skip_event(event, question=''):
+    """
+    Returns True if this contract has no information edge and should be
+    filtered out entirely — not stored, not scored, not shown.
+    """
+    tags = event.get('tags', []) or []
+    for tag in tags:
+        label = (tag.get('label', '') or '').lower().strip()
+        if label in _POLY_SKIP_TAGS:
+            return True
+
+    text = f"{event.get('title', '')} {question}".lower()
+    return any(p in text for p in _SKIP_QUESTION_PATTERNS)
+
+
 # Tag label → our category mapping.
 # Polymarket's tags array on each event contains labels like "Sports", "Soccer",
 # "NBA", "Crypto", "Politics" etc. We map these to our internal categories.
@@ -155,6 +199,10 @@ def process_polymarket_events(events):
         markets = event.get('markets', [])
         for market in markets:
             try:
+                # Skip weather/entertainment/science before any processing
+                if _should_skip_event(event, market.get('question', '')):
+                    continue
+
                 outcome_prices = market.get('outcomePrices', '[]')
                 if isinstance(outcome_prices, str):
                     prices = json.loads(outcome_prices)
