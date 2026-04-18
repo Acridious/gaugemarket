@@ -15,6 +15,7 @@
     --amber:#c27803;--amber-light:#fffbeb;
     --purple:#7c3aed;--purple-light:#f5f3ff;
     --red:#e02424;
+    --slate:#64748b;--slate-light:#f1f5f9;
   }
   body{font-family:'Sora',sans-serif;background:var(--off);color:var(--ink);font-size:15px;line-height:1.6;min-height:100vh;}
 
@@ -22,7 +23,6 @@
   .logo{font-size:17px;font-weight:600;}
   .logo span{color:var(--accent);}
   .nav-right{display:flex;align-items:center;gap:16px;}
-
   .refresh-btn{font-size:13px;padding:7px 16px;border:1px solid var(--border2);border-radius:6px;background:var(--white);color:var(--ink2);cursor:pointer;font-family:'Sora',sans-serif;}
   .refresh-btn:hover{background:var(--off);}
 
@@ -57,7 +57,7 @@
   .card.explained{border-left:4px solid var(--ink3);}
   .card.reversal{border-left:4px solid var(--red);}
   .card.uncertain{border-left:4px solid var(--amber);}
-  .card.played_out{border-left:4px solid var(--green);}
+  .card.terminal{border-left:4px solid var(--slate);opacity:0.75;}
 
   .card-top{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
   .card.no_news .card-top{background:var(--purple-light);}
@@ -65,7 +65,7 @@
   .card.explained .card-top{background:var(--off);}
   .card.reversal .card-top{background:#fff5f5;}
   .card.uncertain .card-top{background:var(--amber-light);}
-  .card.played_out .card-top{background:var(--green-light);}
+  .card.terminal .card-top{background:var(--slate-light);}
 
   .sdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
   .card.no_news .sdot{background:var(--purple);animation:pp 1.5s infinite;}
@@ -73,7 +73,7 @@
   .card.explained .sdot{background:var(--ink3);}
   .card.reversal .sdot{background:var(--red);animation:pp 1.5s infinite;}
   .card.uncertain .sdot{background:var(--amber);animation:pp 1.5s infinite;}
-  .card.played_out .sdot{background:var(--green);}
+  .card.terminal .sdot{background:var(--slate);}
   @keyframes pp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(1.5)}}
 
   .slabel{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;}
@@ -82,7 +82,7 @@
   .card.explained .slabel{color:var(--ink3);}
   .card.reversal .slabel{color:var(--red);}
   .card.uncertain .slabel{color:var(--amber);}
-  .card.played_out .slabel{color:var(--green);}
+  .card.terminal .slabel{color:var(--slate);}
 
   .cat-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:4px;text-transform:uppercase;letter-spacing:0.04em;background:var(--off);color:var(--ink3);border:1px solid var(--border);}
   .score-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:4px;font-family:'JetBrains Mono',monospace;margin-left:auto;}
@@ -110,6 +110,11 @@
   .meta-row{display:flex;gap:20px;flex-wrap:wrap;}
   .meta{font-size:13px;color:var(--ink3);}
   .meta strong{color:var(--ink);font-weight:500;}
+
+  .context-pill{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;display:inline-block;margin-bottom:10px;}
+  .ctx-ingame{background:#fef9c3;color:#854d0e;}
+  .ctx-resolved{background:#f0fdf4;color:#166534;}
+  .ctx-pregame{background:var(--accent-light);color:var(--accent);}
 
   .news-section{padding:14px 20px;border-top:1px solid var(--border);}
   .ns-label{font-size:11px;font-weight:600;color:var(--ink3);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:10px;}
@@ -196,47 +201,135 @@
   }
 
   function timeAgo(dateStr) {
-    const diff = (Date.now() - new Date(dateStr)) / 1000
+    // Timestamps from the API are UTC — append Z if missing so Date parses correctly
+    const ts = dateStr && !dateStr.endsWith('Z') ? dateStr + 'Z' : dateStr
+    const diff = (Date.now() - new Date(ts)) / 1000
     if (diff < 60) return `${Math.floor(diff)}s ago`
     if (diff < 3600) return `${Math.floor(diff/60)}m ago`
     if (diff < 86400) return `${Math.floor(diff/3600)}h ago`
     return `${Math.floor(diff/86400)}d ago`
   }
 
+  // -------------------------------------------------------------------------
+  // Sports context helpers
+  // -------------------------------------------------------------------------
+
+  function sportsContextPill(s) {
+    if (!s.is_sports) return ''
+    const ctx = s.sports_context
+    if (!ctx) return ''
+
+    if (ctx === 'match_resolved_yes' || ctx === 'match_resolved_no') {
+      return '<span class="context-pill ctx-resolved">Match concluded</span>'
+    }
+    if (ctx === 'large_ingame_move' || ctx === 'moderate_ingame_move') {
+      return '<span class="context-pill ctx-ingame">In-game move</span>'
+    }
+    if (ctx === 'pre_game_move') {
+      return '<span class="context-pill ctx-pregame">Pre-game</span>'
+    }
+    return ''
+  }
+
+  // -------------------------------------------------------------------------
+  // Signal labels — category-aware
+  // -------------------------------------------------------------------------
+
   function signalLabel(s) {
+    if (s.state === 'terminal') return 'Match concluded · Market resolved'
     if (s.is_reversal) return 'Reversal · Contract moved opposite direction'
-    if (s.state === 'no_news') return 'Inconsistent · No public news'
-    if (s.state === 'confirmed') return 'News broke after position · Capital moved first'
-    if (s.state === 'explained') return 'News already existed · May explain the move'
-    if (s.state === 'uncertain') return 'News found · Timing unclear'
+
+    // Sports-specific labels use the sports_context field
+    if (s.is_sports && s.sports_context) {
+      if (s.sports_context === 'large_ingame_move')    return 'Large in-game move · Live event'
+      if (s.sports_context === 'moderate_ingame_move') return 'In-game move · Live event'
+      if (s.sports_context === 'pre_game_move')        return 'Pre-game shift · No news'
+    }
+
+    // Geopolitical contracts explain why a slow move matters
+    if (s.category === 'geopolitical') {
+      if (s.state === 'no_news') return 'Geopolitical shift · No public news'
+      if (s.state === 'confirmed') return 'Geopolitical signal · Capital moved before news'
+    }
+
+    // Default labels
+    if (s.state === 'no_news')    return 'Inconsistent · No public news'
+    if (s.state === 'confirmed')  return 'News broke after position · Capital moved first'
+    if (s.state === 'explained')  return 'News already existed · May explain the move'
+    if (s.state === 'uncertain')  return 'News found · Timing unclear'
     return 'Signal detected'
   }
 
   function scoreClass(confidence) {
     if (confidence === 'extreme') return 'score-extreme'
-    if (confidence === 'high') return 'score-high'
+    if (confidence === 'high')    return 'score-high'
     return 'score-medium'
   }
 
   function moveColor(signal) {
-    if (signal.is_reversal) return '#e02424'
-    if (signal.state === 'no_news') return '#7c3aed'
-    if (signal.direction === 'YES') return '#0e9f6e'
+    if (signal.state === 'terminal') return 'var(--slate)'
+    if (signal.is_reversal)          return '#e02424'
+    if (signal.state === 'no_news')  return '#7c3aed'
+    if (signal.direction === 'YES')  return '#0e9f6e'
     return '#c27803'
   }
 
-  function buildObservation(s) {
-    const prev = Math.round(s.prev_odds * 100)
-    const curr = Math.round(s.current_odds * 100)
-    const move = Math.round(s.price_move * 100)
-    const platform = s.platform
-    const related = s.related_same_event + s.related_cross_event
+  // -------------------------------------------------------------------------
+  // Observation text — category-aware narrative
+  // -------------------------------------------------------------------------
 
+  function buildObservation(s) {
+    const prev    = Math.round(s.prev_odds * 100)
+    const curr    = Math.round(s.current_odds * 100)
+    const move    = Math.round(s.price_move * 100)
+    const platform = s.platform
+    const related  = s.related_same_event + s.related_cross_event
+
+    // --- Terminal sports ---
+    if (s.state === 'terminal') {
+      const outcome = curr >= 98 ? 'YES (win/qualification)' : 'NO (loss/elimination)'
+      return `"${platform} contract settled at ${curr}% — market has resolved to ${outcome}. This reflects match conclusion, not a live information signal."`
+    }
+
+    // --- Reversal ---
     if (s.is_reversal) {
       const prevDir = s.reversal_from === 'YES' ? 'up' : 'down'
-      const nowDir = s.direction === 'YES' ? 'up' : 'down'
+      const nowDir  = s.direction === 'YES' ? 'up' : 'down'
       return `"Contract previously moved ${prevDir} ${s.reversal_prev_move} points, now reversing ${nowDir} ${move} points. Sharp reversals on the same contract can indicate informed positioning on both sides — or a correction of an earlier overreaction."`
     }
+
+    // --- Sports: live game ---
+    if (s.is_sports) {
+      const ctx = s.sports_context
+      if (ctx === 'large_ingame_move') {
+        return `"${platform} sports contract moved ${move} points during the live event${related > 0 ? ` across ${related + 1} related contracts` : ''}. A move of this size mid-game typically reflects a score change, red card, injury to a key player, or other game-changing event — not necessarily an information signal."`
+      }
+      if (ctx === 'moderate_ingame_move') {
+        return `"${platform} sports contract moved ${move} points while the event is live. Moderate in-game moves are normal; check the live score to confirm whether this reflects a game event or genuine market uncertainty."`
+      }
+      if (ctx === 'pre_game_move') {
+        return `"${platform} pre-game contract shifted ${move} points from ${prev}% to ${curr}%${s.state === 'no_news' ? ' with no public news explaining the move. Pre-game moves without news can reflect lineup leaks, injury rumours, or sharp money' : ''}."`
+      }
+    }
+
+    // --- Geopolitical ---
+    if (s.category === 'geopolitical') {
+      if (s.state === 'no_news') {
+        return `"${platform} geopolitical contract moved from ${prev}% to ${curr}% — a ${move} point shift with no public news. Geopolitical contracts move slowly by nature; a ${move} point move in a short window is significant and may reflect off-channel information."`
+      }
+      if (s.state === 'confirmed') {
+        return `"${platform} geopolitical contract moved ${move} points before news confirmation. Capital appeared to price in this development ahead of public reporting — consistent with informed positioning on a slow-moving policy or diplomatic signal."`
+      }
+    }
+
+    // --- Macro / political ---
+    if (s.category === 'macro' || s.category === 'political') {
+      if (s.state === 'no_news') {
+        return `"${platform} ${s.category} contract moved from ${prev}% to ${curr}%${related > 0 ? ` across ${related + 1} related contracts` : ''}. No public news found. Macro/political contracts with no-news moves are high-priority signals — they often precede central bank leaks, policy announcements, or breaking geopolitical events."`
+      }
+    }
+
+    // --- Default ---
     if (s.state === 'no_news') {
       return `"${platform} contract moved from ${prev}% to ${curr}% — a ${move} point shift${related > 0 ? ` across ${related + 1} related contracts` : ''}. No public news found to explain this movement."`
     }
@@ -245,6 +338,10 @@
     }
     return `"Signal detected and tracked through to resolution. ${platform} contract moved ${move} points. Full record logged."`
   }
+
+  // -------------------------------------------------------------------------
+  // Related contracts
+  // -------------------------------------------------------------------------
 
   function renderRelatedContracts(contracts) {
     if (!contracts || contracts.length === 0) return ''
@@ -263,8 +360,8 @@
             (curr > 0 ? '<span class="rb-odds">' + curr + '%</span>' : '') +
             (moved ? '<span class="rb-move" style="color:' + moveCol + ';font-size:12px;font-family:JetBrains Mono,monospace;">' + moveStr + '</span>' : '') +
             '<span class="rb-type">' + (
-              c.type === 'causal' ? 'Causally linked' :
-              c.type === 'cross_event' ? 'Related event' :
+              c.type === 'causal'         ? 'Causally linked' :
+              c.type === 'cross_event'    ? 'Related event' :
               c.type === 'cross_platform' ? 'Cross-platform' :
               'Same event'
             ) + '</span>' +
@@ -274,23 +371,29 @@
     '</div>'
   }
 
+  // -------------------------------------------------------------------------
+  // Card renderer
+  // -------------------------------------------------------------------------
+
   function renderCard(s) {
-    const color = moveColor(s)
-    const isUp = s.direction === 'YES'
+    const color         = moveColor(s)
+    const isUp          = s.direction === 'YES'
     const moveBadgeClass = s.state === 'no_news' ? 'move-up' : (isUp ? 'move-up' : 'move-down')
-    const moveSign = isUp ? '+' : '-'
-    const moveAmt = Math.round(s.price_move * 100)
-    const fillWidth = Math.round(s.current_odds * 100)
-    const related = s.related_contracts || []
+    const moveSign      = isUp ? '+' : '-'
+    const moveAmt       = Math.round(s.price_move * 100)
+    const fillWidth     = Math.round(s.current_odds * 100)
+    const related       = s.related_contracts || []
     const totalContracts = 1 + related.length
-    const platforms = [...new Set([s.platform, ...related.map(r => r.platform)])]
+    const platforms     = [...new Set([s.platform, ...related.map(r => r.platform)])]
     const crossPlatform = platforms.length > 1
 
-    const newsHtml = s.news_vacuum
-      ? '<div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div>'
-      : s.news_headline
-        ? '<div class="art"><span class="art-src">' + (s.news_source || 'Yahoo Finance') + '</span><div class="art-hl"><a href="' + s.news_url + '" target="_blank" rel="noopener noreferrer" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);">' + s.news_headline + '</a></div></div>'
-        : ''
+    const newsHtml = s.state === 'terminal'
+      ? '' // no news section for resolved contracts
+      : s.news_vacuum
+        ? '<div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div>'
+        : s.news_headline
+          ? '<div class="art"><span class="art-src">' + (s.news_source || 'Yahoo Finance') + '</span><div class="art-hl"><a href="' + s.news_url + '" target="_blank" rel="noopener noreferrer" style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);">' + s.news_headline + '</a></div></div>'
+          : ''
 
     const convergenceBadge = crossPlatform
       ? '<span class="conv-badge cross">Cross-platform</span>'
@@ -298,7 +401,9 @@
         ? '<span class="conv-badge same">Multiple contracts</span>'
         : ''
 
-    const cardClass = s.is_reversal ? 'reversal' : s.state
+    const cardClass = s.state === 'terminal' ? 'terminal' : (s.is_reversal ? 'reversal' : s.state)
+    const contextPill = sportsContextPill(s)
+
     return '<div class="card ' + cardClass + '">' +
       '<div class="card-top">' +
         '<div class="sdot"></div>' +
@@ -309,6 +414,7 @@
         '<span class="stime">' + timeAgo(s.detected_at) + '</span>' +
       '</div>' +
       '<div class="card-body">' +
+        (contextPill ? '<div style="margin-bottom:10px">' + contextPill + '</div>' : '') +
         '<div class="contracts-list">' +
           '<div class="contract-item primary">' +
             '<div class="bet-top">' +
@@ -337,18 +443,17 @@
       '</div>' +
       (newsHtml ? '<div class="news-section"><div class="ns-label">News check</div>' + newsHtml + '</div>' : '') +
       '<div class="obs">' +
-        '<div class="obs-label">Something\'s going on here</div>' +
+        '<div class="obs-label">What\'s going on here</div>' +
         '<div class="obs-text">' + buildObservation(s) + '</div>' +
       '</div>' +
     '</div>'
   }
 
-
   function renderEmpty() {
     return `
       <div class="empty">
         <div class="empty-title">No signals yet</div>
-        <div class="empty-sub">The poller is running and monitoring Polymarket and Kalshi every 5 minutes. Signals appear when unusual price movements are detected with no news to explain them.</div>
+        <div class="empty-sub">The poller is running and monitoring Polymarket every 5 minutes. Signals appear when unusual price movements are detected.</div>
         <div class="empty-timer">Next poll in ~5 minutes</div>
       </div>
     `
@@ -357,8 +462,8 @@
   function formatVolume(v) {
     if (!v) return '$0'
     if (v >= 1_000_000_000) return '$' + (v / 1_000_000_000).toFixed(1) + 'B'
-    if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(1) + 'M'
-    if (v >= 1_000) return '$' + (v / 1_000).toFixed(0) + 'K'
+    if (v >= 1_000_000)     return '$' + (v / 1_000_000).toFixed(1) + 'M'
+    if (v >= 1_000)         return '$' + (v / 1_000).toFixed(0) + 'K'
     return '$' + v.toFixed(0)
   }
 
@@ -369,11 +474,8 @@
         if (!res.ok) throw new Error('HTTP ' + res.status)
         return await res.json()
       } catch(e) {
-        if (i < retries - 1) {
-          await new Promise(r => setTimeout(r, delayMs))
-        } else {
-          throw e
-        }
+        if (i < retries - 1) await new Promise(r => setTimeout(r, delayMs))
+        else throw e
       }
     }
   }
@@ -381,15 +483,11 @@
   async function loadStats() {
     try {
       const data = await fetchWithRetry(`${API}/stats`)
-      document.getElementById('stat-volume').textContent = formatVolume(data.total_volume_monitored)
+      document.getElementById('stat-volume').textContent  = formatVolume(data.total_volume_monitored)
       document.getElementById('stat-markets').textContent = (data.market_count ?? 0).toLocaleString()
-      document.getElementById('stat-total').textContent = data.total ?? 0
-      document.getElementById('stat-today').textContent = data.today ?? 0
-      document.getElementById('stat-high').innerHTML = `<span>${data.high_confidence ?? 0}</span>`
-
-    } catch(e) {
-
-    }
+      document.getElementById('stat-today').textContent   = data.today ?? 0
+      document.getElementById('stat-high').innerHTML      = `<span>${data.high_confidence ?? 0}</span>`
+    } catch(e) { /* silently fail — stats are decorative */ }
   }
 
   async function loadFeed() {
@@ -402,7 +500,6 @@
         : `${API}/feed?category=${currentCategory}`
 
       const data = await fetchWithRetry(url)
-
       document.getElementById('error-box').style.display = 'none'
 
       if (!data.feed || data.feed.length === 0) {
@@ -413,12 +510,8 @@
 
       feed.innerHTML = data.feed.map(renderCard).join('')
 
-      // Show real last signal time from most recent signal
-      if (data.feed.length > 0) {
-        const latest = data.feed[0].detected_at
-        document.getElementById('last-updated').textContent =
-          `Most recent signal ${timeAgo(latest)}`
-      }
+      const latest = data.feed[0].detected_at
+      document.getElementById('last-updated').textContent = `Most recent signal ${timeAgo(latest)}`
     } catch(e) {
       document.getElementById('error-box').style.display = 'block'
       document.getElementById('error-box').innerHTML =
@@ -431,15 +524,10 @@
     await Promise.all([loadStats(), loadFeed()])
   }
 
-  // Auto-refresh every 5 mins — keeps Railway web service warm
-  // and shows fresh signals without manual refresh
+  // Auto-refresh every 5 mins — single interval, keeps Railway web service warm
   setInterval(loadAll, 5 * 60 * 1000)
 
-  // Load on startup
   loadAll()
-
-  // Auto refresh every 5 minutes
-  setInterval(loadAll, 300000)
 </script>
 
 </body>

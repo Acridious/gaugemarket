@@ -1,9 +1,9 @@
 """
 Cross-event AI grouper using Groq Llama 3.1 8B.
-Runs every 30 minutes.
-Reads unvalidated cross-event candidates from DB,
-asks Groq if each pair is genuinely related,
-then updates related_contracts on confirmed signals.
+Runs every 30 minutes as a separate Railway worker process.
+
+Reads unvalidated cross-event candidates from DB, asks Groq if each pair
+is genuinely related, then updates related_contracts on confirmed signals.
 
 Uses category-aware prompts:
 - Sports/esports: strict same-event matching
@@ -15,42 +15,31 @@ import json
 import time
 import requests
 from datetime import datetime
-from database import (get_unvalidated_candidates, mark_candidate_validated,
-                      get_signal_by_id, get_connection,
-                      get_recent_signals_for_grouping,
-                      save_cross_event_candidate)
 
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
-GROQ_MODEL = 'llama-3.1-8b-instant'
+from database import (
+    get_unvalidated_candidates, mark_candidate_validated,
+    get_signal_by_id, get_connection,
+    get_recent_signals_for_grouping,
+    save_cross_event_candidate,
+    db,
+)
+from constants import (
+    SKIP_WORDS,
+    CAUSAL_CATEGORIES,
+    SAME_EVENT_CATEGORIES,
+)
+
+GROQ_API_KEY        = os.environ.get('GROQ_API_KEY', '')
+GROQ_MODEL          = 'llama-3.1-8b-instant'
 GROUPER_INTERVAL_MINS = 30
 
-# Categories where causal relationships matter
-# e.g. Fed cuts → Bitcoin rallies, Iran ceasefire → oil drops
-CAUSAL_CATEGORIES = {
-    'political', 'macro', 'geopolitical', 'commodities', 'crypto'
-}
 
-# Categories where strict same-event matching is correct
-# e.g. same match, same tournament, same player
-SAME_EVENT_CATEGORIES = {
-    'sports', 'esports', 'other'
-}
+# ---------------------------------------------------------------------------
+# Prompt building
+# ---------------------------------------------------------------------------
 
 def build_prompt(question_a, event_a, question_b, event_b,
                  category_a='other', category_b='other'):
-    """
-    Build the right prompt based on signal categories.
-
-    For causal categories (macro, political, geopolitical):
-    Ask whether one event logically affects the probability of the other.
-    Captures cross-market spillover and downstream effects.
-
-    For same-event categories (sports, esports):
-    Ask whether both questions are about the exact same real world event.
-    Avoids grouping unrelated matches or tournaments.
-    """
-
-    # Use causal prompt if either signal is in a causal category
     use_causal = (category_a in CAUSAL_CATEGORIES or
                   category_b in CAUSAL_CATEGORIES)
 
@@ -79,27 +68,25 @@ def build_prompt(question_a, event_a, question_b, event_b,
             f"Answer only YES or NO."
         )
 
+
 def get_relationship_type(category_a, category_b):
-    """Return the relationship type label for the card."""
     use_causal = (category_a in CAUSAL_CATEGORIES or
                   category_b in CAUSAL_CATEGORIES)
-    if use_causal:
-        return 'causal'
-    return 'cross_event'
+    return 'causal' if use_causal else 'cross_event'
+
+
+# ---------------------------------------------------------------------------
+# Groq call
+# ---------------------------------------------------------------------------
 
 def ask_groq(question_a, event_a, question_b, event_b,
              category_a='other', category_b='other'):
-    """
-    Ask Groq whether two signals are related.
-    Uses category-aware prompts.
-    Returns True (related) or False (unrelated).
-    """
     if not GROQ_API_KEY:
         return False
 
     prompt = build_prompt(
         question_a, event_a, question_b, event_b,
-        category_a, category_b
+        category_a, category_b,
     )
 
     try:
@@ -107,31 +94,36 @@ def ask_groq(question_a, event_a, question_b, event_b,
             'https://api.groq.com/openai/v1/chat/completions',
             headers={
                 'Authorization': f'Bearer {GROQ_API_KEY}',
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
             },
             json={
                 'model': GROQ_MODEL,
                 'messages': [{'role': 'user', 'content': prompt}],
                 'max_tokens': 5,
-                'temperature': 0
+                'temperature': 0,
             },
-            timeout=10
+            timeout=10,
         )
         response.raise_for_status()
-        answer = (response.json()['choices'][0]['message']['content']
-                  .strip().upper())
+        answer = (
+            response.json()['choices'][0]['message']['content']
+            .strip().upper()
+        )
         return answer.startswith('YES')
     except Exception as e:
         print(f"Groq error: {e}")
         return False
 
+
+# ---------------------------------------------------------------------------
+# Signal updates
+# ---------------------------------------------------------------------------
+
 def update_signal_related_contracts(signal_id, new_contract):
-    """Add a validated related contract to a signal's related_contracts JSON."""
-    conn = get_connection()
-    try:
+    with db() as conn:
         rows = conn.run(
             "SELECT related_contracts FROM signals WHERE id = :id",
-            id=signal_id
+            id=signal_id,
         )
         if not rows:
             return
@@ -153,26 +145,22 @@ def update_signal_related_contracts(signal_id, new_contract):
                 "related_cross_event = related_cross_event + 1 "
                 "WHERE id = :id",
                 rc=json.dumps(existing),
-                id=signal_id
+                id=signal_id,
             )
-    except Exception as e:
-        print(f"Error updating signal {signal_id}: {e}")
-    finally:
-        conn.close()
+
 
 def get_signal_category(signal_id):
-    """Get the category of a signal from the DB."""
-    conn = get_connection()
-    try:
+    with db() as conn:
         rows = conn.run(
             "SELECT category FROM signals WHERE id = :id",
-            id=signal_id
+            id=signal_id,
         )
         return rows[0][0] if rows else 'other'
-    except Exception:
-        return 'other'
-    finally:
-        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Candidate collection from recent signals
+# ---------------------------------------------------------------------------
 
 def collect_candidates_from_recent_signals():
     """
@@ -186,33 +174,21 @@ def collect_candidates_from_recent_signals():
         print(f"Not enough recent signals to pair ({len(signals)})")
         return
 
-    SKIP_WORDS = {
-        'will', 'the', 'a', 'an', 'be', 'is', 'are', 'by', 'in',
-        'on', 'at', 'to', 'for', 'of', 'win', 'lose', 'before',
-        'after', 'during', 'most', 'least', 'first', 'last', 'next',
-        'have', 'has', 'had', 'does', 'did', 'when', 'what', 'which',
-        'that', 'this', 'with', 'from', 'than', 'more', 'there',
-        '2026', '2027', '2028', 'january', 'february', 'march',
-        'april', 'may', 'june', 'july', 'august', 'september',
-        'october', 'november', 'december'
-    }
-
     saved = 0
     for i, sig_a in enumerate(signals):
-        for sig_b in signals[i+1:]:
-            # Skip same event
+        for sig_b in signals[i + 1:]:
             if sig_a['event_id'] == sig_b['event_id']:
                 continue
 
             words_a = set(sig_a['question'].lower().split()) - SKIP_WORDS
             words_b = set(sig_b['question'].lower().split()) - SKIP_WORDS
-            common = words_a & words_b
+            common  = words_a & words_b
 
-            # Lower threshold for sports (tournament name alone = 1 word)
             cat_a = sig_a.get('category', 'other')
             cat_b = sig_b.get('category', 'other')
-            min_common = 1 if (cat_a in ('sports', 'esports') or
-                               cat_b in ('sports', 'esports')) else 2
+            is_sports = (cat_a in SAME_EVENT_CATEGORIES or
+                         cat_b in SAME_EVENT_CATEGORIES)
+            min_common = 1 if is_sports else 2
 
             if len(common) < min_common:
                 continue
@@ -226,13 +202,18 @@ def collect_candidates_from_recent_signals():
                     event_title_a=sig_a['event_title'],
                     event_title_b=sig_b['event_title'],
                     platform_a=sig_a['platform'],
-                    platform_b=sig_b['platform']
+                    platform_b=sig_b['platform'],
                 )
                 saved += 1
-            except Exception as e:
-                pass  # Duplicate pairs silently ignored
+            except Exception:
+                pass  # duplicate pairs silently ignored
 
     print(f"Collected {saved} new cross-event candidates from {len(signals)} recent signals")
+
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
 
 def run_grouper():
     print("AI Grouper starting...")
@@ -245,9 +226,8 @@ def run_grouper():
         print("Add GROQ_API_KEY to Railway variables to enable")
 
     while True:
-        print(f"\n[Grouper] {datetime.now().strftime('%H:%M:%S')}")
+        print(f"\n[Grouper] {datetime.utcnow().strftime('%H:%M:%S')} UTC")
 
-        # First collect new candidates from recent signals across all polls
         collect_candidates_from_recent_signals()
 
         candidates = get_unvalidated_candidates(limit=50)
@@ -262,18 +242,16 @@ def run_grouper():
             confirmed = 0
 
             for c in candidates:
-                # Get categories for both signals
                 cat_a = get_signal_category(c['signal_id_a'])
                 cat_b = get_signal_category(c['signal_id_b'])
 
-                use_causal = (cat_a in CAUSAL_CATEGORIES or
-                              cat_b in CAUSAL_CATEGORIES)
-                prompt_type = 'causal' if use_causal else 'same-event'
+                use_causal   = cat_a in CAUSAL_CATEGORIES or cat_b in CAUSAL_CATEGORIES
+                prompt_type  = 'causal' if use_causal else 'same-event'
 
                 is_related = ask_groq(
                     c['question_a'], c['event_title_a'],
                     c['question_b'], c['event_title_b'],
-                    cat_a, cat_b
+                    cat_a, cat_b,
                 )
 
                 mark_candidate_validated(c['id'], is_related)
@@ -282,42 +260,40 @@ def run_grouper():
                 if is_related:
                     confirmed += 1
                     rel_type = get_relationship_type(cat_a, cat_b)
-                    print(f"  [{prompt_type}] RELATED ({rel_type}): "
-                          f"{c['question_a'][:40]} "
-                          f"<-> {c['question_b'][:40]}")
-
+                    print(
+                        f"  [{prompt_type}] RELATED ({rel_type}): "
+                        f"{c['question_a'][:40]} <-> {c['question_b'][:40]}"
+                    )
                     update_signal_related_contracts(
                         c['signal_id_a'],
                         {
-                            'question': c['question_b'],
-                            'odds': 0,
-                            'platform': c['platform_b'],
+                            'question':    c['question_b'],
+                            'odds':        0,
+                            'platform':    c['platform_b'],
                             'event_title': c['event_title_b'],
-                            'type': rel_type
-                        }
+                            'type':        rel_type,
+                        },
                     )
                     update_signal_related_contracts(
                         c['signal_id_b'],
                         {
-                            'question': c['question_a'],
-                            'odds': 0,
-                            'platform': c['platform_a'],
+                            'question':    c['question_a'],
+                            'odds':        0,
+                            'platform':    c['platform_a'],
                             'event_title': c['event_title_a'],
-                            'type': rel_type
-                        }
+                            'type':        rel_type,
+                        },
                     )
                 else:
-                    print(f"  [{prompt_type}] UNRELATED: "
-                          f"pair #{c['id']} discarded")
+                    print(f"  [{prompt_type}] UNRELATED: pair #{c['id']} discarded")
 
-                # Small delay between Groq calls
-                time.sleep(0.5)
+                time.sleep(0.5)  # stay within Groq rate limits
 
             print(f"Validated {validated} — {confirmed} confirmed related")
 
-        sleep_secs = GROUPER_INTERVAL_MINS * 60
         print(f"Grouper sleeping {GROUPER_INTERVAL_MINS} mins...")
-        time.sleep(sleep_secs)
+        time.sleep(GROUPER_INTERVAL_MINS * 60)
+
 
 if __name__ == '__main__':
     run_grouper()
