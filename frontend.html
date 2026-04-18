@@ -446,6 +446,18 @@ function renderSportsCard(s) {
   const isUp=s.direction==='YES', curr=pct(s.current_odds), prev=pct(s.prev_odds), move=pct(s.price_move)
   const sign=isUp?'+':'−', ctx=s.sports_context||''
   const obs=sportsObservation(s)
+  const related=Array.isArray(s.related_contracts)?s.related_contracts:[]
+  const relHtml=related.length>0?`
+    <div class="related-toggle" onclick="toggleRelated(this)">
+      <span class="chevron">▾</span>&nbsp;${related.length} related contract${related.length>1?'s':''}
+    </div>
+    <div class="related-list">
+      ${related.map(r=>`<div class="rel-item">
+        <div class="rel-q">"${r.question}"</div>
+        ${r.odds>0?`<div class="rel-odds">${Math.round(r.odds*100)}%</div>`:''}
+        <div class="rel-type">${r.type==='causal'?'Causally linked':r.type==='cross_event'?'Related event':'Same event'}</div>
+      </div>`).join('')}
+    </div>`:''
   return `<div class="sport-card ${s.is_terminal?'terminal':''} ${sportsCardClass(ctx)}">
     <div class="sport-top">
       <span class="sport-cat">${s.category}</span>
@@ -463,6 +475,7 @@ function renderSportsCard(s) {
         <span class="sp-badge ${isUp?'move-up':'move-down'}">${sign}${move}%</span>
         <span class="sp-score">Score ${s.score}</span>
       </div>
+      ${relHtml}
     </div>
     <div class="sport-obs">
       <div class="sport-obs-label">${s.ai_summary ? 'What this means' : 'Context'}</div>
