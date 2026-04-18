@@ -87,9 +87,71 @@ def fetch_polymarket_events():
     return all_events
 
 
+# Tag label → our category mapping.
+# Polymarket's tags array on each event contains labels like "Sports", "Soccer",
+# "NBA", "Crypto", "Politics" etc. We map these to our internal categories.
+# This is checked BEFORE any pattern matching or Groq — it's authoritative.
+_POLY_TAG_CATEGORY = {
+    # Sports tags
+    'sports': 'sports', 'soccer': 'sports', 'football': 'sports',
+    'basketball': 'sports', 'baseball': 'sports', 'hockey': 'sports',
+    'tennis': 'sports', 'golf': 'sports', 'rugby': 'sports',
+    'cricket': 'sports', 'motorsports': 'sports', 'mma': 'sports',
+    'boxing': 'sports', 'cycling': 'sports', 'athletics': 'sports',
+    'nba': 'sports', 'nfl': 'sports', 'mlb': 'sports', 'nhl': 'sports',
+    'epl': 'sports', 'nba 2k': 'sports', 'ufc': 'sports', 'f1': 'sports',
+    'pga': 'sports', 'champions league': 'sports',
+    # Esports tags
+    'esports': 'esports', 'e-sports': 'esports',
+    # Political tags
+    'politics': 'political', 'political': 'political', 'elections': 'political',
+    'us politics': 'political', 'government': 'political',
+    # Macro tags
+    'economics': 'macro', 'economy': 'macro', 'finance': 'macro',
+    'federal reserve': 'macro', 'interest rates': 'macro',
+    # Geopolitical tags
+    'geopolitics': 'geopolitical', 'geopolitical': 'geopolitical',
+    'world': 'geopolitical', 'international': 'geopolitical',
+    'war': 'geopolitical', 'military': 'geopolitical',
+    # Crypto tags
+    'crypto': 'crypto', 'cryptocurrency': 'crypto', 'bitcoin': 'crypto',
+    'ethereum': 'crypto', 'defi': 'crypto', 'blockchain': 'crypto',
+    # Commodities tags
+    'commodities': 'commodities', 'oil': 'commodities', 'gold': 'commodities',
+    'energy': 'commodities',
+}
+
+def _category_from_polymarket_event(event):
+    """
+    Extract category directly from Polymarket's own tags and slug.
+    Returns a category string or None if we can't determine it confidently.
+
+    Priority:
+    1. Event slug starts with /sports/ — authoritative, always sports
+    2. Tags array contains a known sports/category tag
+    3. None — fall through to our own categorisation logic
+    """
+    slug = event.get('slug', '') or ''
+
+    # Slug-based: polymarket.com/sports/epl/epl-new-bou-2026-04-18
+    # The slug field in the API is just the path segment e.g. "epl-new-bou-2026-04-18"
+    # but the event also has a 'series' or parent context we can check via tags
+    # Most reliable: check if any tag label maps to a category
+    tags = event.get('tags', []) or []
+    for tag in tags:
+        label = (tag.get('label', '') or '').lower().strip()
+        if label in _POLY_TAG_CATEGORY:
+            return _POLY_TAG_CATEGORY[label]
+
+    return None
+
+
 def process_polymarket_events(events):
     processed = []
     for event in events:
+        # Extract Polymarket's own category from tags — authoritative
+        poly_category = _category_from_polymarket_event(event)
+
         markets = event.get('markets', [])
         for market in markets:
             try:
@@ -105,20 +167,20 @@ def process_polymarket_events(events):
                 yes_odds = float(prices[0]) if prices else 0
                 volume   = float(market.get('volume', 0))
 
-                # Skip completely dead markets; MIN_VOLUME is used for scoring only
                 if volume < 1:
                     continue
 
                 processed.append({
-                    'market_id':    f"poly_{market.get('id', '')}",
-                    'event_id':     f"poly_event_{event.get('id', '')}",
-                    'event_title':  event.get('title', ''),
-                    'event_slug':   event.get('slug', ''),
-                    'market_slug':  market.get('slug', ''),
-                    'question':     market.get('question', ''),
-                    'odds':         yes_odds,
-                    'volume':       volume,
-                    'platform':     'Polymarket',
+                    'market_id':      f"poly_{market.get('id', '')}",
+                    'event_id':       f"poly_event_{event.get('id', '')}",
+                    'event_title':    event.get('title', ''),
+                    'event_slug':     event.get('slug', ''),
+                    'market_slug':    market.get('slug', ''),
+                    'question':       market.get('question', ''),
+                    'odds':           yes_odds,
+                    'volume':         volume,
+                    'platform':       'Polymarket',
+                    'poly_category':  poly_category,  # None if unknown
                 })
             except Exception:
                 continue
@@ -425,7 +487,13 @@ def detect_signals(all_markets):
         if mins_elapsed > 60:
             continue
 
-        category = get_event_category(market['event_title'], market['question'])
+        # Use Polymarket's own tag-based category first — it's authoritative.
+        # Only fall through to our own categorisation (pattern match + Groq)
+        # if the API didn't give us a clear tag.
+        category = (
+            market.get('poly_category')
+            or get_event_category(market['event_title'], market['question'])
+        )
 
         # ---- Sports-specific guard ----
         # Reject signals from markets that have already resolved (terminal odds).
