@@ -5,7 +5,8 @@ import json
 from datetime import datetime
 from database import (setup_db, save_snapshot, get_last_snapshot,
                       save_signal, save_cross_event_candidate,
-                      get_signal_stats, cleanup_old_data)
+                      get_signal_stats, cleanup_old_data,
+                      save_volume_snapshot)
 from news import (check_news_vacuum, get_event_category, 
                   get_keyword_group, RELATED_KEYWORDS)
 
@@ -547,14 +548,20 @@ def run():
         
         all_markets = poly_markets + kal_markets
         print(f"Total: {len(all_markets)} markets to monitor")
-        
+
+        # Sum total volume across all monitored markets
+        # Polymarket volume already includes both YES and NO sides
+        total_volume = sum(m.get('volume', 0) for m in all_markets)
+        save_volume_snapshot(total_volume, len(all_markets))
+        print(f"Total volume monitored: ${total_volume:,.0f}")
+
         signals = detect_signals(all_markets)
         collect_cross_event_candidates(signals)
 
         # Clean up old snapshots every hour (every 12 polls)
         if poll_count % 12 == 0:
             cleanup_old_data()
-        
+
         stats = get_signal_stats()
         print(f"Signals today: {stats['today']} | "
               f"Total: {stats['total']} | "

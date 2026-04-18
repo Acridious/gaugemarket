@@ -160,10 +160,10 @@
 <div class="main">
 
   <div class="stats-bar">
-    <div class="stat"><div class="stat-val" id="stat-total">—</div><div class="stat-label">Total signals</div></div>
-    <div class="stat"><div class="stat-val" id="stat-today">—</div><div class="stat-label">Today</div></div>
+    <div class="stat"><div class="stat-val" id="stat-volume">—</div><div class="stat-label">Volume monitored</div></div>
+    <div class="stat"><div class="stat-val" id="stat-markets">—</div><div class="stat-label">Markets watched</div></div>
+    <div class="stat"><div class="stat-val" id="stat-today">—</div><div class="stat-label">Signals today</div></div>
     <div class="stat"><div class="stat-val" id="stat-high">—</div><div class="stat-label">High confidence</div></div>
-    <div class="stat"><div class="stat-val"><span>2</span></div><div class="stat-label">Platforms monitored</div></div>
   </div>
 
   <div class="feed-header">
@@ -357,10 +357,20 @@
     `
   }
 
+  function formatVolume(v) {
+    if (!v) return '$0'
+    if (v >= 1_000_000_000) return '$' + (v / 1_000_000_000).toFixed(1) + 'B'
+    if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(1) + 'M'
+    if (v >= 1_000) return '$' + (v / 1_000).toFixed(0) + 'K'
+    return '$' + v.toFixed(0)
+  }
+
   async function loadStats() {
     try {
       const res = await fetch(`${API}/stats`)
       const data = await res.json()
+      document.getElementById('stat-volume').textContent = formatVolume(data.total_volume_monitored)
+      document.getElementById('stat-markets').textContent = (data.market_count ?? 0).toLocaleString()
       document.getElementById('stat-total').textContent = data.total ?? 0
       document.getElementById('stat-today').textContent = data.today ?? 0
       document.getElementById('stat-high').innerHTML = `<span>${data.high_confidence ?? 0}</span>`

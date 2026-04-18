@@ -98,6 +98,16 @@ def setup_db():
         ON cross_event_candidates(validated)
     ''')
 
+    # Volume tracking — stores total monitored volume per poll
+    conn.run('''
+        CREATE TABLE IF NOT EXISTS volume_stats (
+            id SERIAL PRIMARY KEY,
+            total_volume REAL NOT NULL,
+            market_count INTEGER NOT NULL,
+            recorded_at TEXT NOT NULL
+        )
+    ''')
+
     conn.close()
     print("Database ready")
 
@@ -175,6 +185,58 @@ def save_signal(signal_data):
     signal_id = rows[0][0] if rows else None
     conn.close()
     return signal_id
+
+def save_volume_snapshot(total_volume, market_count):
+    """Save total monitored volume from each poll cycle."""
+    conn = get_connection()
+    try:
+        conn.run('''
+            INSERT INTO volume_stats (total_volume, market_count, recorded_at)
+            VALUES (:total_volume, :market_count, :recorded_at)
+        ''',
+            total_volume=total_volume,
+            market_count=market_count,
+            recorded_at=datetime.now().isoformat()
+        )
+        # Keep only last 24h of volume snapshots
+        cutoff = (datetime.now() -
+                  __import__('datetime').timedelta(hours=24)).isoformat()
+        conn.run(
+            "DELETE FROM volume_stats WHERE recorded_at < :cutoff",
+            cutoff=cutoff
+        )
+    except Exception as e:
+        print(f"Volume snapshot error (non-fatal): {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def get_volume_stats():
+    """Get the latest volume snapshot."""
+    conn = get_connection()
+    try:
+        rows = conn.run('''
+            SELECT total_volume, market_count, recorded_at
+            FROM volume_stats
+            ORDER BY recorded_at DESC
+            LIMIT 1
+        ''')
+        if rows:
+            return {
+                'total_volume': rows[0][0],
+                'market_count': rows[0][1],
+                'recorded_at': rows[0][2]
+            }
+        return {'total_volume': 0, 'market_count': 0, 'recorded_at': None}
+    except Exception as e:
+        return {'total_volume': 0, 'market_count': 0, 'recorded_at': None}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 def save_cross_event_candidate(signal_id_a, signal_id_b,
                                 question_a, question_b,

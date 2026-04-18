@@ -3,7 +3,8 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from database import (get_signals_filtered, get_signal_by_id,
-                      get_signal_stats, get_recent_signals)
+                      get_signal_stats, get_recent_signals,
+                      get_volume_stats)
 from datetime import datetime
 
 app = FastAPI(
@@ -228,10 +229,13 @@ def get_signal(signal_id: int):
 @app.get("/stats")
 def get_stats():
     stats = get_signal_stats()
+    volume = get_volume_stats()
     return {
         **stats,
-        "platforms_monitored": 2,
-        "platforms": ["Polymarket", "Kalshi"],
+        "total_volume_monitored": volume['total_volume'],
+        "market_count": volume['market_count'],
+        "platforms_monitored": 1,
+        "platforms": ["Polymarket"],
         "timestamp": datetime.now().isoformat()
     }
 
