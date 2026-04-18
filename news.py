@@ -205,19 +205,19 @@ def get_event_category(event_title, question):
     if groq_key:
         try:
             prompt = (
-                f"Classify this prediction market question into exactly one category.\n\n"
-                f"Event: "{event_title}"\n"
-                f"Question: "{question}"\n\n"
-                f"Categories:\n"
-                f"- sports: any sport, athlete, team, match, tournament, score, stats\n"
-                f"- esports: gaming tournaments, video game competitions\n"
-                f"- political: elections, politicians, government policy, voting\n"
-                f"- macro: economy, interest rates, inflation, GDP, central banks, jobs\n"
-                f"- geopolitical: wars, international relations, sanctions, diplomacy, military\n"
-                f"- commodities: oil, gold, gas, metals, agricultural products\n"
-                f"- crypto: bitcoin, ethereum, cryptocurrency, blockchain, DeFi\n"
-                f"- other: anything that doesn't clearly fit above\n\n"
-                f"Reply with only the category name, nothing else."
+                "Classify this prediction market question into exactly one category.\n\n"
+                + f"Event: \"{event_title}\"\n"
+                + f"Question: \"{question}\"\n\n"
+                + "Categories:\n"
+                + "- sports: any sport, athlete, team, match, tournament, score, stats\n"
+                + "- esports: gaming tournaments, video game competitions\n"
+                + "- political: elections, politicians, government policy, voting\n"
+                + "- macro: economy, interest rates, inflation, GDP, central banks, jobs\n"
+                + "- geopolitical: wars, international relations, sanctions, diplomacy, military\n"
+                + "- commodities: oil, gold, gas, metals, agricultural products\n"
+                + "- crypto: bitcoin, ethereum, cryptocurrency, blockchain, DeFi\n"
+                + "- other: anything that does not clearly fit above\n\n"
+                + "Reply with only the category name, nothing else."
             )
             response = requests.post(
                 'https://api.groq.com/openai/v1/chat/completions',
@@ -316,13 +316,13 @@ def is_article_relevant(article_headline, event_title, question):
 
     try:
         prompt = (
-            f"Is this news article relevant to this prediction market contract?\n\n"
-            f"Contract: "{question}" (event: "{event_title}")\n"
-            f"Article headline: "{article_headline}"\n\n"
-            f"Answer YES only if the article is specifically about the same "
-            f"event, team, player, or topic as the contract.\n"
-            f"Answer NO if it's a different event, team, or only tangentially related.\n"
-            f"Answer only YES or NO."
+            "Is this news article relevant to this prediction market contract?\n\n"
+            + f"Contract: \"{question}\" (event: \"{event_title}\")\n"
+            + f"Article headline: \"{article_headline}\"\n\n"
+            + "Answer YES only if the article is specifically about the same "
+            + "event, team, player, or topic as the contract.\n"
+            + "Answer NO if it is a different event, team, or only tangentially related.\n"
+            + "Answer only YES or NO."
         )
         response = requests.post(
             'https://api.groq.com/openai/v1/chat/completions',
