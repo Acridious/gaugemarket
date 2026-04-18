@@ -351,6 +351,11 @@ def get_event_category(event_title, question):
                 "This includes player prop bets even if the sport is not named.\n\n"
                 "Reply with only the single category word, nothing else."
             )
+            # Check category budget before calling
+            from groq_client import budget_remaining
+            if not budget_remaining('category'):
+                print("  Groq category budget exhausted — using keyword fallback")
+                raise Exception("budget_exhausted")
             response = _req.post(
                 GROQ_URL,
                 headers={
@@ -365,6 +370,9 @@ def get_event_category(event_title, question):
                 },
                 timeout=8,
             )
+            # Manually consume category budget
+            from groq_client import _consume
+            _consume('category')
             response.raise_for_status()
             result = (
                 response.json()['choices'][0]['message']['content']
@@ -462,7 +470,7 @@ def is_article_relevant(article_headline, event_title, question, article_descrip
         "- When in doubt, answer NO\n\n"
         "Answer with only YES or NO, nothing else."
     )
-    result = groq_yes_no(prompt)
+    result = groq_yes_no(prompt, slot='news')
     if not result:
         print(f"  Groq: irrelevant — {article_headline[:50]}")
     return result

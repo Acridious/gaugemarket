@@ -26,6 +26,7 @@ from database import (
     save_volume_snapshot,
 )
 from inline_grouper import run_inline_grouper
+from groq_client import reset_poll_budget, budget_summary
 from news import check_news_vacuum, get_event_category, get_keyword_group, RELATED_KEYWORDS, generate_signal_summary
 from constants import (
     SKIP_WORDS,
@@ -736,6 +737,7 @@ def run():
         poll_count += 1
         print(f"\n[Poll #{poll_count}] {datetime.utcnow().strftime('%H:%M:%S')} UTC")
 
+        reset_poll_budget()  # reset Groq call counters for this cycle
         poly_events  = fetch_polymarket_events()
         poly_markets = process_polymarket_events(poly_events)
         print(f"Polymarket: {len(poly_markets)} active markets")
@@ -759,6 +761,7 @@ def run():
             f"High confidence: {stats['high_confidence']}"
         )
 
+        print(f"Groq budget used: {budget_summary()}")
         print(f"Sleeping {POLL_INTERVAL}s until next poll...")
         time.sleep(POLL_INTERVAL)
 

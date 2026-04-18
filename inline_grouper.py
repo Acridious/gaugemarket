@@ -39,7 +39,7 @@ which is negligible given the 5-minute poll interval.
 
 import json
 import time
-from groq_client import groq_yes_no, groq_available
+from groq_client import groq_yes_no, groq_available, budget_remaining
 from constants import CAUSAL_CATEGORIES, SAME_EVENT_CATEGORIES, SKIP_WORDS
 from database import db
 
@@ -230,6 +230,10 @@ def run_inline_grouper(signals):
 
     print(f"  Inline grouper: {n} signals → {pairs_raw} raw pairs")
 
+    if not budget_remaining('grouper'):
+        print("  Inline grouper: no budget remaining — skipping")
+        return 0
+
     for i, sig_a in enumerate(signals):
         for sig_b in signals[i + 1:]:
 
@@ -240,7 +244,7 @@ def run_inline_grouper(signals):
             prompt, rel_type = _build_prompt(sig_a, sig_b)
             pairs_sent += 1
 
-            is_related = groq_yes_no(prompt)
+            is_related = groq_yes_no(prompt, slot='grouper')
 
             if is_related:
                 confirmed += 1
