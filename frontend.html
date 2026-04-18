@@ -57,6 +57,7 @@
   .card.no_news{border-left:4px solid var(--purple);}
   .card.confirmed{border-left:4px solid var(--green);}
   .card.explained{border-left:4px solid var(--ink3);}
+  .card.reversal{border-left:4px solid var(--red);}
   .card.uncertain{border-left:4px solid var(--amber);}
   .card.played_out{border-left:4px solid var(--green);}
 
@@ -64,6 +65,7 @@
   .card.no_news .card-top{background:var(--purple-light);}
   .card.confirmed .card-top{background:var(--green-light);}
   .card.explained .card-top{background:var(--off);}
+  .card.reversal .card-top{background:#fff5f5;}
   .card.uncertain .card-top{background:var(--amber-light);}
   .card.played_out .card-top{background:var(--green-light);}
 
@@ -71,6 +73,7 @@
   .card.no_news .sdot{background:var(--purple);animation:pp 1.5s infinite;}
   .card.confirmed .sdot{background:var(--green);animation:pp 1.5s infinite;}
   .card.explained .sdot{background:var(--ink3);}
+  .card.reversal .sdot{background:var(--red);animation:pp 1.5s infinite;}
   .card.uncertain .sdot{background:var(--amber);animation:pp 1.5s infinite;}
   .card.played_out .sdot{background:var(--green);}
   @keyframes pp{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(1.5)}}
@@ -79,6 +82,7 @@
   .card.no_news .slabel{color:var(--purple);}
   .card.confirmed .slabel{color:var(--green);}
   .card.explained .slabel{color:var(--ink3);}
+  .card.reversal .slabel{color:var(--red);}
   .card.uncertain .slabel{color:var(--amber);}
   .card.played_out .slabel{color:var(--green);}
 
@@ -203,6 +207,7 @@
   }
 
   function signalLabel(s) {
+    if (s.is_reversal) return 'Reversal · Contract moved opposite direction'
     if (s.state === 'no_news') return 'Inconsistent · No public news'
     if (s.state === 'confirmed') return 'News broke after position · Capital moved first'
     if (s.state === 'explained') return 'News already existed · May explain the move'
@@ -217,6 +222,7 @@
   }
 
   function moveColor(signal) {
+    if (signal.is_reversal) return '#e02424'
     if (signal.state === 'no_news') return '#7c3aed'
     if (signal.direction === 'YES') return '#0e9f6e'
     return '#c27803'
@@ -229,6 +235,11 @@
     const platform = s.platform
     const related = s.related_same_event + s.related_cross_event
 
+    if (s.is_reversal) {
+      const prevDir = s.reversal_from === 'YES' ? 'up' : 'down'
+      const nowDir = s.direction === 'YES' ? 'up' : 'down'
+      return `"Contract previously moved ${prevDir} ${s.reversal_prev_move} points, now reversing ${nowDir} ${move} points. Sharp reversals on the same contract can indicate informed positioning on both sides — or a correction of an earlier overreaction."`
+    }
     if (s.state === 'no_news') {
       return `"${platform} contract moved from ${prev}% to ${curr}% — a ${move} point shift${related > 0 ? ` across ${related + 1} related contracts` : ''}. No public news found to explain this movement."`
     }
@@ -290,7 +301,8 @@
         ? '<span class="conv-badge same">Multiple contracts</span>'
         : ''
 
-    return '<div class="card ' + s.state + '">' +
+    const cardClass = s.is_reversal ? 'reversal' : s.state
+    return '<div class="card ' + cardClass + '">' +
       '<div class="card-top">' +
         '<div class="sdot"></div>' +
         '<span class="slabel">' + signalLabel(s) + '</span>' +

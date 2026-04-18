@@ -66,15 +66,30 @@ def enrich_signal(s):
 
 def deduplicate_signals(signals):
     """
-    Keep only the highest scoring signal per unique question.
-    Prevents same market appearing multiple times from different poll cycles.
+    One card per contract — always shows the most recent move.
+    If direction flips from a previous signal, flags as a reversal.
+
+    Volatile markets can generate many signals on the same contract.
+    Showing all of them clutters the feed. Most recent is most relevant.
     """
     seen = {}
     for s in signals:
         key = s['question'].strip().lower()
-        if key not in seen or s['score'] > seen[key]['score']:
+        if key not in seen:
             seen[key] = s
-    # Return in original order (most recent first)
+        else:
+            existing = seen[key]
+            # Keep most recent
+            if s['detected_at'] > existing['detected_at']:
+                # Flag reversal if direction flipped
+                if existing.get('direction') != s.get('direction'):
+                    s['is_reversal'] = True
+                    s['reversal_from'] = existing['direction']
+                    s['reversal_prev_move'] = round(
+                        existing.get('price_move', 0) * 100
+                    )
+                seen[key] = s
+
     result = list(seen.values())
     result.sort(key=lambda x: x['detected_at'], reverse=True)
     return result
