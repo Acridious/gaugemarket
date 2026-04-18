@@ -24,6 +24,7 @@ from database import (
     save_signal,
     get_signal_stats, cleanup_old_data,
     save_volume_snapshot,
+    get_signals_for_news_recheck, update_signal_news,
 )
 from inline_grouper import run_inline_grouper
 from groq_client import reset_poll_budget, budget_summary
@@ -724,6 +725,59 @@ def collect_cross_event_candidates(signals):
 
 
 # ---------------------------------------------------------------------------
+# News re-check
+# ---------------------------------------------------------------------------
+
+def run_news_recheck():
+    """
+    Re-check news for signals that fired ~30 minutes ago.
+    Vacuum signals get priority — if news has broken since detection,
+    their state flips from no_news → confirmed (capital moved first)
+    or → explained (news was already there, we missed it first time).
+
+    Runs once per poll cycle after detect_signals completes.
+    Uses the 'news' Groq budget slot so it doesn't compete with
+    real-time signal processing.
+    """
+    signals = get_signals_for_news_recheck()
+    if not signals:
+        return
+
+    vacuum_count  = sum(1 for s in signals if s['news_vacuum'])
+    recent_count  = len(signals) - vacuum_count
+    print(f"  News re-check: {vacuum_count} vacuum + {recent_count} recent signals")
+
+    updated = 0
+    for s in signals:
+        news_result = check_news_vacuum(
+            s['event_title'],
+            s['question'],
+            category=s.get('category', 'other'),
+            signal_detected_at=s['detected_at'],
+        )
+
+        was_vacuum = bool(s['news_vacuum'])
+        now_vacuum = news_result.get('vacuum', True)
+
+        # Only update if something changed
+        if was_vacuum == now_vacuum and not (was_vacuum and not now_vacuum):
+            continue
+
+        update_signal_news(s['id'], news_result)
+        updated += 1
+
+        if was_vacuum and not now_vacuum:
+            article = news_result['articles'][0] if news_result['articles'] else None
+            timing  = news_result.get('timing', 'unknown')
+            hl      = article['headline'][:60] if article else '—'
+            print(f"  Re-check UPDATE [{timing}]: {s['question'][:45]} → {hl}")
+        elif not was_vacuum and now_vacuum:
+            print(f"  Re-check: article no longer found for {s['question'][:45]}")
+
+    print(f"  News re-check complete — {updated} signals updated")
+
+
+# ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
@@ -749,6 +803,7 @@ def run():
 
         signals = detect_signals(all_markets)
         run_inline_grouper(signals)  # causal linking via Groq, inline
+        run_news_recheck()            # re-check news for signals ~30 mins old
 
         # Cleanup runs hourly (every 12 polls at 5-min interval)
         if poll_count % 12 == 0:

@@ -463,6 +463,83 @@ def get_signal_stats():
 # Cleanup
 # ---------------------------------------------------------------------------
 
+def get_signals_for_news_recheck():
+    """
+    Returns signals that need a news re-check.
+
+    Priority order:
+    1. Vacuum signals (news_vacuum=1) detected 25-35 mins ago
+       — the 30-min window: long enough for news to break, still actionable
+    2. All other signals detected 25-35 mins ago
+       — catches cases where initial news check was wrong or incomplete
+
+    We use a 25-35 minute window (not exactly 30) to avoid missing signals
+    that were stored a few seconds off due to poll timing.
+
+    Excludes terminal sports signals — no point re-checking a resolved match.
+    """
+    from datetime import timedelta
+    now = datetime.utcnow()
+    window_start = (now - timedelta(minutes=35)).isoformat()
+    window_end   = (now - timedelta(minutes=25)).isoformat()
+
+    with db() as conn:
+        # Vacuum signals first
+        rows_vacuum = conn.run('''
+            SELECT id, event_title, question, category,
+                   detected_at, news_vacuum, news_timing,
+                   prev_odds, current_odds, direction
+            FROM signals
+            WHERE news_vacuum = 1
+              AND is_terminal = 0
+              AND detected_at BETWEEN :start AND :end
+            ORDER BY score DESC
+            LIMIT 20
+        ''', start=window_start, end=window_end)
+        cols = [c['name'] for c in conn.columns]
+        vacuum_sigs = [dict(zip(cols, r)) for r in rows_vacuum]
+
+        # All other recent signals
+        rows_recent = conn.run('''
+            SELECT id, event_title, question, category,
+                   detected_at, news_vacuum, news_timing,
+                   prev_odds, current_odds, direction
+            FROM signals
+            WHERE news_vacuum = 0
+              AND is_terminal = 0
+              AND detected_at BETWEEN :start AND :end
+            ORDER BY score DESC
+            LIMIT 10
+        ''', start=window_start, end=window_end)
+        cols = [c['name'] for c in conn.columns]
+        recent_sigs = [dict(zip(cols, r)) for r in rows_recent]
+
+    return vacuum_sigs + recent_sigs
+
+
+def update_signal_news(signal_id, news_result):
+    """Update a signal's news fields after a re-check."""
+    articles = news_result.get('articles', [])
+    article  = articles[0] if articles else None
+    with db() as conn:
+        conn.run('''
+            UPDATE signals SET
+                news_vacuum   = :vacuum,
+                news_timing   = :timing,
+                news_headline = :headline,
+                news_source   = :source,
+                news_url      = :url
+            WHERE id = :id
+        ''',
+            vacuum=1 if news_result.get('vacuum', True) else 0,
+            timing=news_result.get('timing', 'unknown'),
+            headline=article['headline'] if article else None,
+            source=article['source']   if article else None,
+            url=article['url']         if article else None,
+            id=signal_id,
+        )
+
+
 def cleanup_old_data():
     """
     Lean storage — keep DB tiny while there are no paying customers.
