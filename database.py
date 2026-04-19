@@ -576,8 +576,8 @@ def flag_signal_for_retry(signal_id, needs_news=False, needs_summary=False):
             INSERT INTO retry_queue (signal_id, needs_news, needs_summary, created_at)
             VALUES (:signal_id, :needs_news, :needs_summary, :created_at)
             ON CONFLICT (signal_id) DO UPDATE SET
-                needs_news    = retry_queue.needs_news    OR :needs_news,
-                needs_summary = retry_queue.needs_summary OR :needs_summary
+                needs_news    = GREATEST(retry_queue.needs_news,    :needs_news),
+                needs_summary = GREATEST(retry_queue.needs_summary, :needs_summary)
         ''',
             signal_id=signal_id,
             needs_news=1 if needs_news else 0,
