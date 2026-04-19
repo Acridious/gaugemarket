@@ -77,7 +77,6 @@ CATEGORY_FEEDS = {
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
         ('https://www.cnbc.com/id/10000113/device/rss/rss.html', 'CNBC Politics'),
         ('https://feeds.bbci.co.uk/news/politics/rss.xml', 'BBC Politics'),
-        ('https://apnews.com/rss/politics', 'AP News'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ],
     'macro': [
@@ -91,7 +90,6 @@ CATEGORY_FEEDS = {
     'geopolitical': [
         ('https://feeds.bbci.co.uk/news/world/rss.xml', 'BBC World'),
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
-        ('https://apnews.com/rss/world-news', 'AP International'),
         ('https://www.cnbc.com/id/100727362/device/rss/rss.html', 'CNBC World'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ],
@@ -122,7 +120,6 @@ CATEGORY_FEEDS = {
     ],
     'other': [
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
-        ('https://apnews.com/rss/ap-top-news', 'AP News'),
         ('https://feeds.bbci.co.uk/news/rss.xml', 'BBC News'),
         ('https://finance.yahoo.com/rss/', 'Yahoo Finance'),
     ]
@@ -520,21 +517,16 @@ def is_article_relevant(article_headline, event_title, question, article_descrip
     """
     from groq_client import groq_yes_no
     prompt = (
-        "You are checking if a news article is directly relevant to a "
-        "prediction market contract. Be strict — only say YES if the "
-        "article is specifically and directly about the exact same topic.\n\n"
-        f"PREDICTION MARKET CONTRACT:\n"
-        f"Event: {event_title}\n"
-        f"Question: {question}\n\n"
-        f"NEWS ARTICLE HEADLINE:\n{article_headline}\n"
-        + (f"ARTICLE CONTEXT:\n{article_description[:400]}\n\n" if article_description else "\n")
-        + "Rules:\n"
-        "- YES: article is directly about the same specific event, location, person, or team\n"
-        "- NO: article is about a different event, different country, different team\n"
-        "- NO: article is only loosely related by topic (e.g. weather article about wrong city)\n"
-        "- NO: article mentions a related concept but not this specific contract\n"
-        "- When in doubt, answer NO\n\n"
-        "Answer with only YES or NO, nothing else."
+        "Does this news article contain information that would directly "
+        "affect the probability of this prediction market contract?\n\n"
+        f"CONTRACT: {question}\n"
+        f"EVENT: {event_title}\n\n"
+        f"ARTICLE: {article_headline}\n"
+        + (f"CONTEXT: {article_description[:300]}\n\n" if article_description else "\n\n")
+        + "Answer YES if the article mentions the same person, team, event, "
+        "or directly related development. Answer NO if the article is about "
+        "something unrelated.\n"
+        "Answer only YES or NO."
     )
     result = groq_yes_no(prompt, slot='news')
     if not result:

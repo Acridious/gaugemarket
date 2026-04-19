@@ -591,21 +591,29 @@ def detect_signals(all_markets):
 
         sports_label = sports_context_label(current_odds, prev_odds, category)
 
-        # Generate AI summary — runs after news check so it has article context.
-        # For vacuum signals: reasons about what informed capital might know.
-        # For news signals: connects article content to the specific contract move.
-        ai_summary = generate_signal_summary(
-            event_title=market['event_title'],
-            question=market['question'],
-            prev_odds=prev_odds,
-            current_odds=current_odds,
-            price_move=price_move,
-            direction=direction,
-            category=category,
-            news_article=news_article,
-            news_vacuum=news_result['vacuum'],
-            sports_context=sports_label,
+        # Generate AI summary — skip for in-game sports props.
+        # In-game moves (goal scored, player fouled out) don't benefit
+        # from AI analysis — the context is self-evident from the score.
+        # Reserve summary budget for pre-game sports and intelligence signals.
+        _skip_summary = (
+            category in ('sports', 'esports')
+            and sports_label in ('large_ingame_move', 'moderate_ingame_move',
+                                 'match_resolved_yes', 'match_resolved_no')
         )
+        ai_summary = None
+        if not _skip_summary:
+            ai_summary = generate_signal_summary(
+                event_title=market['event_title'],
+                question=market['question'],
+                prev_odds=prev_odds,
+                current_odds=current_odds,
+                price_move=price_move,
+                direction=direction,
+                category=category,
+                news_article=news_article,
+                news_vacuum=news_result['vacuum'],
+                sports_context=sports_label,
+            )
 
         signal = {
             'event_id':            market['event_id'],
