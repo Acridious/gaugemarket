@@ -134,24 +134,6 @@ def setup_db():
             )
         ''')
 
-        # Add new columns to existing tables if they don't exist yet
-        # (safe to run on an existing DB)
-        for col, definition in [
-            ('is_terminal', 'INTEGER DEFAULT 0'),
-            ('mins_elapsed', 'REAL DEFAULT 0'),
-            ('ai_summary', 'TEXT'),
-            ('news_articles_json', 'TEXT'),
-            ('background_headline', 'TEXT'),
-            ('background_source', 'TEXT'),
-            ('background_url', 'TEXT'),
-        ]:
-            try:
-                conn.run(
-                    f"ALTER TABLE signals ADD COLUMN {col} {definition}"
-                )
-            except Exception:
-                pass  # column already exists
-
         conn.run('''
             CREATE TABLE IF NOT EXISTS cross_event_candidates (
                 id             SERIAL PRIMARY KEY,
@@ -191,34 +173,32 @@ def setup_db():
             ON cross_event_candidates(validated)
         ''')
 
-    # Retry queue for budget-exhausted signals
-    conn.run('''
-        CREATE TABLE IF NOT EXISTS retry_queue (
-            signal_id     INTEGER PRIMARY KEY,
-            needs_news    INTEGER DEFAULT 0,
-            needs_summary INTEGER DEFAULT 0,
-            created_at    TEXT NOT NULL
-        )
-    ''')
+        # Retry queue table
+        conn.run('''
+            CREATE TABLE IF NOT EXISTS retry_queue (
+                signal_id     INTEGER PRIMARY KEY,
+                needs_news    INTEGER DEFAULT 0,
+                needs_summary INTEGER DEFAULT 0,
+                created_at    TEXT NOT NULL
+            )
+        ''')
 
-    # Safe migrations — IF NOT EXISTS prevents errors on re-deploy
-    migrations = [
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS news_articles_json TEXT",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_headline TEXT",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_source TEXT",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_url TEXT",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS sports_context TEXT",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS ai_summary TEXT",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS is_terminal INTEGER DEFAULT 0",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS mins_elapsed REAL DEFAULT 0",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS event_id TEXT",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_contracts TEXT",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_same_event INTEGER DEFAULT 0",
-        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_cross_event INTEGER DEFAULT 0",
-        "CREATE TABLE IF NOT EXISTS retry_queue (signal_id INTEGER PRIMARY KEY, needs_news INTEGER DEFAULT 0, needs_summary INTEGER DEFAULT 0, created_at TEXT NOT NULL)",
-    ]
-    for m in migrations:
-        conn.run(m)  # IF NOT EXISTS makes these safe to run repeatedly
+        # Safe migrations — IF NOT EXISTS means safe to run on every deploy
+        for m in [
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS news_articles_json TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_headline TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_source TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_url TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS sports_context TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS ai_summary TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS is_terminal INTEGER DEFAULT 0",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS mins_elapsed REAL DEFAULT 0",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS event_id TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_contracts TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_same_event INTEGER DEFAULT 0",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_cross_event INTEGER DEFAULT 0",
+        ]:
+            conn.run(m)
 
     print("Database ready")
 
