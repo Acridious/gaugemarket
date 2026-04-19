@@ -501,6 +501,44 @@ def _build_related_contracts(same_event, cross_event):
 
 
 # ---------------------------------------------------------------------------
+# Expiry decay detection
+# ---------------------------------------------------------------------------
+
+def is_expiring_decay(market, current_odds, price_move, direction):
+    """
+    Returns True if this looks like natural expiry decay rather than a signal.
+    Contracts drifting toward 0/100 as their resolution date approaches
+    are not information signals — they're just the market being correct.
+    """
+    end_date_str = market.get('end_date')
+    if not end_date_str:
+        return False
+    try:
+        from datetime import timezone
+        end_date_str = end_date_str.replace('Z', '+00:00')
+        end_date = datetime.fromisoformat(end_date_str)
+        if end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=timezone.utc)
+        now_utc = datetime.now(timezone.utc)
+        hours_until_expiry = (end_date - now_utc).total_seconds() / 3600
+    except Exception:
+        return False
+    if hours_until_expiry > 24 or hours_until_expiry < 0:
+        return False
+    if direction == 'NO'  and current_odds < 0.15:
+        return True
+    if direction == 'YES' and current_odds > 0.85:
+        return True
+    if hours_until_expiry < 6:
+        if current_odds < 0.20 and direction == 'NO':
+            return True
+        if current_odds > 0.80 and direction == 'YES':
+            return True
+    return False
+
+
+
+# ---------------------------------------------------------------------------
 # Signal detection
 # ---------------------------------------------------------------------------
 
