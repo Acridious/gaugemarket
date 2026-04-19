@@ -51,6 +51,44 @@ _daily_total = 0        # total calls today across all slots
 _daily_reset = None     # date of last reset
 
 
+# ---------------------------------------------------------------------------
+# Per-minute rate limiter
+# ---------------------------------------------------------------------------
+# Groq free tier: 30 req/min hard limit.
+# We target 25 req/min (83%) to stay comfortably under it.
+# Tracks call timestamps in a sliding 60-second window — when we're
+# approaching the limit we sleep just long enough to let old calls
+# fall out of the window rather than hitting 429 and waiting 7 seconds.
+
+import time as _time
+import collections as _collections
+
+RATE_LIMIT_PER_MIN = 25       # target, not the hard limit
+_call_times = _collections.deque()  # timestamps of recent calls
+
+
+def _rate_limit_wait():
+    """
+    Block until it's safe to make another Groq call.
+    Checks the sliding 60-second window and sleeps only as long as needed.
+    Much cheaper than hitting 429 (1s + 2s + 4s = 7s wasted per retry).
+    """
+    now = _time.monotonic()
+
+    # Drop calls older than 60 seconds from the window
+    while _call_times and now - _call_times[0] > 60:
+        _call_times.popleft()
+
+    if len(_call_times) >= RATE_LIMIT_PER_MIN:
+        # Oldest call in window — sleep until it's 60s old
+        sleep_for = 60 - (now - _call_times[0]) + 0.1
+        if sleep_for > 0:
+            print(f"  Groq rate limit: sleeping {sleep_for:.1f}s to stay under {RATE_LIMIT_PER_MIN}/min")
+            _time.sleep(sleep_for)
+
+    _call_times.append(_time.monotonic())
+
+
 def _check_daily_reset():
     """Reset daily counter at UTC midnight."""
     global _daily_total, _daily_reset
@@ -113,6 +151,7 @@ def groq_yes_no(prompt, timeout=8, retries=3, slot='news'):
 
     for attempt in range(retries):
         try:
+            _rate_limit_wait()  # proactive throttle — avoids 429s
             response = requests.post(
                 GROQ_URL,
                 headers={
@@ -128,9 +167,10 @@ def groq_yes_no(prompt, timeout=8, retries=3, slot='news'):
                 timeout=timeout,
             )
             if response.status_code == 429:
-                wait = 2 ** attempt  # 1s, 2s, 4s
+                # Unexpected 429 despite rate limiting — back off and retry
+                wait = 2 ** attempt
                 print(f"  Groq 429 — waiting {wait}s before retry {attempt+1}/{retries}")
-                import time; time.sleep(wait)
+                _time.sleep(wait)
                 continue
             response.raise_for_status()
             answer = (
@@ -160,6 +200,7 @@ def groq_complete(prompt, max_tokens=150, temperature=0.3, timeout=10, retries=3
 
     for attempt in range(retries):
         try:
+            _rate_limit_wait()  # proactive throttle
             response = requests.post(
                 GROQ_URL,
                 headers={
@@ -177,7 +218,7 @@ def groq_complete(prompt, max_tokens=150, temperature=0.3, timeout=10, retries=3
             if response.status_code == 429:
                 wait = 2 ** attempt
                 print(f"  Groq 429 — waiting {wait}s before retry {attempt+1}/{retries}")
-                import time; time.sleep(wait)
+                _time.sleep(wait)
                 continue
             response.raise_for_status()
             return (
