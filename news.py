@@ -727,9 +727,7 @@ def generate_signal_summary(
 
         prompt = (
             "You are a prediction market analyst. Write exactly 2-3 sentences "
-            "explaining what happened and what it means for this contract. "
-            "Be specific and direct. Do not use vague language. "
-            "Do not start with 'I' or repeat the question back.\n\n"
+            "connecting this news article to this contract price movement.\n\n"
             f"CONTRACT: {question}\n"
             f"EVENT: {event_title}\n"
             f"CATEGORY: {category}\n"
@@ -738,10 +736,14 @@ def generate_signal_summary(
             f"NEWS SOURCE: {source}\n"
             f"ARTICLE CONTEXT: {description[:600]}\n"
             f"TIMING: {timing_note}\n\n"
-            "Write 2-3 sentences: first explain what the news says in plain language, "
-            "then connect it specifically to why this contract moved in this direction "
-            "by this amount. If the article appeared before the move, note the market "
-            "may be catching up. If after, note capital moved ahead of public news."
+            "STRICT RULES:\n"
+            "1. Only use facts from the article provided — do not add outside information\n"
+            "2. If the article is only loosely related, say so explicitly\n"
+            "3. Do not invent details not present in the headline or context\n"
+            "4. If timing is 'after', state clearly that capital moved before the article\n"
+            "5. If timing is 'before', state the market may be catching up to existing news\n"
+            "6. Do not start with 'I'\n\n"
+            "Write 2-3 sentences following these rules."
         )
     else:
         # ── NEWS VACUUM ─────────────────────────────────────────────────
@@ -793,18 +795,25 @@ def generate_signal_summary(
 
         prompt = (
             "You are a prediction market analyst. Write exactly 2-3 sentences "
-            "about this unusual price movement where NO public news was found. "
-            "Be specific and analytical. Do not use vague language. "
-            "Do not start with 'I' or repeat the question back.\n\n"
+            "about this unusual price movement where NO public news was found.\n\n"
             f"CONTRACT: {question}\n"
             f"EVENT: {event_title}\n"
             f"CATEGORY: {category}\n"
             f"PRICE MOVE: {prev_pct}% → {curr_pct}% ({dir_word}, {move_pct} points)\n\n"
             f"CONTEXT: {category_context}{sports_note}\n\n"
-            "Write 2-3 sentences: first describe the move plainly and note there is "
-            "no public news to explain it, then give a specific and plausible reason "
-            "why informed capital might be moving in this direction based on the "
-            "contract topic and category. Be concrete, not generic."
+            "STRICT RULES — you must follow all of these:\n"
+            "1. Do NOT invent specific events, names, visits, meetings, or decisions\n"
+            "2. Do NOT claim to know WHY capital moved — you don't\n"
+            "3. DO describe the move factually (size, direction, category)\n"
+            "4. DO explain what TYPE of information typically causes this pattern\n"
+            "5. Use hedged language: 'may reflect', 'consistent with', 'could suggest'\n"
+            "6. Do not start with 'I'\n\n"
+            "Example of BAD output: 'possibly triggered by the upcoming visit of a '\n"
+            "high-ranking official' — this is invented speculation presented as fact.\n"
+            "Example of GOOD output: 'A move of this size with no public news is '\n"
+            "consistent with informed positioning — geopolitical contracts typically '\n"
+            "move on off-channel diplomatic signals not yet in the press.'\n\n"
+            "Write 2-3 sentences following these rules."
         )
 
     from groq_client import groq_complete
@@ -814,16 +823,25 @@ def generate_signal_summary(
 
 def _find_background_news(search_terms, feeds, max_age_days=4):
     """
-    Fallback: find a loosely related article up to max_age_days old.
-    Uses primary search term only, no Groq check (preserve budget).
+    Fallback: find a background context article up to max_age_days old.
+
+    Requires BOTH primary AND at least one secondary search term to match.
+    This prevents "Iran arsenal" articles appearing for "Iran diplomatic meeting"
+    contracts — the primary term (iran) matches but the secondary terms
+    (diplomatic, meeting, talks) do not.
+
+    No Groq check to preserve budget, but the two-term requirement
+    filters out the worst false matches.
     Returns a single article dict with timing='background', or None.
     """
     from datetime import timedelta
     cutoff = datetime.utcnow() - timedelta(days=max_age_days)
 
-    primary = search_terms[0] if search_terms else ''
-    if not primary:
+    if not search_terms:
         return None
+
+    primary   = search_terms[0]
+    secondary = search_terms[1:] if len(search_terms) > 1 else []
 
     sources_tried = set()
     for feed_url, source_name in feeds:
@@ -835,11 +853,24 @@ def _find_background_news(search_terms, feeds, max_age_days=4):
         for entry in entries[:30]:
             title = entry.get('title', '').lower()
             desc  = entry.get('description', '').lower()
-            if primary not in title and primary not in desc:
+            combined = title + ' ' + desc
+
+            # Require primary term in title (not just description)
+            if primary not in title:
                 continue
+
+            # Require at least one secondary term anywhere
+            # If no secondary terms available, skip — single-term match
+            # is too loose for background context
+            if not secondary:
+                continue
+            if not any(t in combined for t in secondary):
+                continue
+
             pub_date = parse_article_date(entry.get('pubDate', ''))
             if pub_date and pub_date < cutoff:
                 continue
+
             return {
                 'headline': entry.get('title', ''),
                 'source':   source_name,
