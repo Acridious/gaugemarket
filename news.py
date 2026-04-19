@@ -40,6 +40,108 @@ else:
     print("Brave Search API: NOT configured — set BRAVE_API_KEY env var")
 
 # ---------------------------------------------------------------------------
+# NewsAPI.org configuration
+# ---------------------------------------------------------------------------
+# Free tier: 100 requests/day, searches 150,000+ sources.
+# Used as Pass 1b — runs after Brave (or instead of if Brave quota exhausted).
+# Docs: https://newsapi.org/docs/endpoints/everything
+
+NEWSAPI_KEY     = _os.environ.get('NEWSAPI_KEY', '')
+NEWSAPI_URL     = 'https://newsapi.org/v2/everything'
+NEWSAPI_DAILY_CAP = 80  # stay under 100/day free limit
+
+_newsapi_calls_today = 0
+_newsapi_reset_date  = None
+
+def _newsapi_budget_remaining():
+    global _newsapi_calls_today, _newsapi_reset_date
+    from datetime import date
+    today = date.today()
+    if _newsapi_reset_date != today:
+        _newsapi_reset_date  = today
+        _newsapi_calls_today = 0
+    return _newsapi_calls_today < NEWSAPI_DAILY_CAP
+
+def _newsapi_consume():
+    global _newsapi_calls_today
+    _newsapi_calls_today += 1
+
+if NEWSAPI_KEY:
+    print(f"NewsAPI: configured (key length {len(NEWSAPI_KEY)}, daily cap: {NEWSAPI_DAILY_CAP})")
+else:
+    print("NewsAPI: NOT configured — set NEWSAPI_KEY env var")
+
+
+def _newsapi_search(query, category='other', max_results=5):
+    """
+    Search NewsAPI.org for recent articles matching query.
+    Returns list of article dicts compatible with our pipeline.
+    """
+    if not NEWSAPI_KEY:
+        return []
+    if not _newsapi_budget_remaining():
+        print(f"  NewsAPI daily cap ({NEWSAPI_DAILY_CAP}) reached")
+        return []
+
+    # Map our categories to NewsAPI source domains for better relevance
+    source_domains = {
+        'geopolitical': 'reuters.com,bbc.co.uk,aljazeera.com,apnews.com,theguardian.com',
+        'macro':        'reuters.com,bloomberg.com,cnbc.com,ft.com,wsj.com,marketwatch.com',
+        'political':    'reuters.com,apnews.com,politico.com,axios.com,bbc.co.uk',
+        'crypto':       'coindesk.com,cointelegraph.com,decrypt.co,theblock.co',
+        'commodities':  'reuters.com,bloomberg.com,oilprice.com,ft.com',
+        'sports':       'espn.com,bbc.co.uk,skysports.com,goal.com,theathletic.com',
+        'esports':      'dexerto.com,dotesports.com,esportsinsider.com',
+    }.get(category, 'reuters.com,bbc.co.uk,apnews.com,theguardian.com')
+
+    from datetime import datetime, timedelta
+    from_date = (datetime.utcnow() - timedelta(days=3)).strftime('%Y-%m-%d')
+
+    _newsapi_consume()
+    try:
+        resp = _requests.get(
+            NEWSAPI_URL,
+            params={
+                'q':          query,
+                'domains':    source_domains,
+                'from':       from_date,
+                'sortBy':     'relevancy',
+                'pageSize':   max_results,
+                'language':   'en',
+            },
+            headers={'X-Api-Key': NEWSAPI_KEY},
+            timeout=8,
+        )
+        if resp.status_code == 426:
+            print("  NewsAPI: upgrade required for this feature")
+            return []
+        if resp.status_code == 429:
+            print("  NewsAPI: rate limited")
+            return []
+        if resp.status_code == 401:
+            print("  NewsAPI: invalid API key")
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+
+        articles = []
+        for a in data.get('articles', []):
+            if not a.get('title') or a['title'] == '[Removed]':
+                continue
+            articles.append({
+                'title':       a.get('title', ''),
+                'description': a.get('description', '') or a.get('content', '') or '',
+                'link':        a.get('url', ''),
+                'source':      a.get('source', {}).get('name', 'NewsAPI'),
+                'pubDate':     a.get('publishedAt', ''),
+            })
+        return articles
+
+    except Exception as e:
+        print(f"  NewsAPI error: {e}")
+        return []
+
+# ---------------------------------------------------------------------------
 # Brave Search News API
 # ---------------------------------------------------------------------------
 
