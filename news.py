@@ -117,8 +117,8 @@ CATEGORY_FEEDS = {
     'esports': [
         ('https://www.dexerto.com/feed/', 'Dexerto'),
         ('https://dotesports.com/feed', 'Dot Esports'),
-        ('https://www.theloadout.com/feeds/latest', 'The Loadout'),
-        ('https://sports.yahoo.com/esports/rss', 'Yahoo Esports'),
+        ('https://esportsinsider.com/feed', 'Esports Insider'),
+        ('https://www.gosugamers.net/rss', 'GosuGamers'),
     ],
     'other': [
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
@@ -548,16 +548,29 @@ def _looks_like_ingame(event_title, question):
     text = f"{event_title} {question}".lower()
 
     # In-game prop patterns — these resolve during live play
+    # and will never have a news article explaining them
     ingame_patterns = [
-        'o/u 0.', 'o/u 1.', 'o/u 2.',   # low threshold props = live
+        # Low threshold O/U props — only meaningful live
+        'o/u 0.', 'o/u 1.', 'o/u 2.',
+        # Player/team stat props
         'rebounds o/u', 'assists o/u', 'points o/u',
-        'kills o/u', 'total kills',
-        'first blood', 'first scorer', 'first goal',
-        'anytime scorer', 'last scorer',
+        'kills o/u', 'total kills', 'over/under',
+        # Esports in-game events
+        'first blood', 'first kill', 'penta kill', 'pentakill',
+        'destroy barracks', 'slay a dragon', 'slay dragon',
+        'ends in daytime', 'ends in night', 'ends at night',
+        'any player', 'both teams destroy', 'both teams slay',
+        'both teams score', 'btts',
+        'first tower', 'first dragon', 'first baron', 'first roshan',
         'map winner', 'round winner',
         'odd/even', 'correct score',
-        'both teams to score', 'btts',
-        'next goal', 'next point',
+        # Sports in-game
+        'first scorer', 'first goal', 'next goal', 'next point',
+        'anytime scorer', 'last scorer',
+        # Kill/score totals that only make sense live
+        'total kills', 'total goals', 'total runs',
+        # Time-based esports props
+        'game duration', 'game time', 'game length',
     ]
     return any(p in text for p in ingame_patterns)
 
