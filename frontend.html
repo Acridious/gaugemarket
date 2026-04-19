@@ -192,6 +192,14 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .empty p{font-size:13px;color:var(--ink3);}
 .loading{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:40px;text-align:center;color:var(--ink3);font-size:13px;}
 .error{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px 18px;color:var(--red);font-size:13px;margin-bottom:16px;display:none;}
+.sparkline-wrap{margin-bottom:10px;}
+.sparkline-meta{display:flex;gap:16px;margin-top:4px;}
+.spark-stat{font-size:11px;color:var(--ink3);font-family:'JetBrains Mono',monospace;}
+.spark-stat strong{color:var(--ink2);}
+.source-tier{font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace;margin-left:6px;vertical-align:middle;}
+.tier-1{background:#dbeafe;color:#1e40af;}
+.tier-2{background:#f0fdf4;color:#065f46;}
+.tier-3{background:var(--off);color:var(--ink3);}
 
 @media(max-width:700px){
   .stats-bar{grid-template-columns:repeat(2,1fr);}
@@ -228,6 +236,9 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
     <button class="tab-btn" onclick="switchTab('sports', this)">
       Sports <span class="tab-count" id="tab-count-sports">—</span>
     </button>
+    <button class="tab-btn" onclick="switchTab('history', this)">
+      History <span class="tab-count" id="tab-count-history">30d</span>
+    </button>
   </div>
 
   <div id="error-box" class="error"></div>
@@ -245,6 +256,24 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
       </div>
     </div>
     <div class="intel-grid" id="intel-feed"><div class="loading">Loading signals…</div></div>
+  </div>
+
+  <!-- HISTORY VIEW -->
+  <div id="view-history" class="view">
+    <div class="section-head">
+      <div class="section-filters" id="history-filters">
+        <button class="sf on" onclick="setHistoryFilter('all',this)">All</button>
+        <button class="sf" onclick="setHistoryFilter('geopolitical',this)">Geo</button>
+        <button class="sf" onclick="setHistoryFilter('macro',this)">Macro</button>
+        <button class="sf" onclick="setHistoryFilter('political',this)">Political</button>
+        <button class="sf" onclick="setHistoryFilter('crypto',this)">Crypto</button>
+        <button class="sf" onclick="setHistoryFilter('sports',this)">Sports</button>
+      </div>
+    </div>
+    <div class="signal-stack" id="history-feed"><div class="loading">Loading history…</div></div>
+    <div id="history-load-more" style="display:none;text-align:center;margin-top:16px">
+      <button class="refresh-btn" onclick="loadMoreHistory()">Load more</button>
+    </div>
   </div>
 
   <!-- SPORTS VIEW -->
@@ -300,6 +329,7 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
   document.getElementById('view-'+name).classList.add('active')
   btn.classList.add('active')
+  if (name === 'history' && historySignals.length === 0) loadHistory()
 }
 
 // ── INTELLIGENCE HELPERS ──────────────────────────────────────────────────
@@ -375,7 +405,7 @@ function renderIntelCard(s) {
     s.news_vacuum
       ? `<div class="news-section"><div class="ns-label">News check</div><div class="vacuum"><div class="vdot"></div><div class="vtext">No articles found matching this contract. Capital is leading the information record.</div></div>${s.background_headline ? `<div class="art background" style="margin:8px 0 0"><span style="font-size:11px;color:var(--ink3);font-style:italic;display:block;margin-bottom:4px">Background context</span><span class="art-src" style="background:var(--off);color:var(--ink3);border:1px solid var(--border)">${s.background_source||"News"}</span><div class="art-hl"><a href="${s.background_url}" target="_blank" rel="noopener">${s.background_headline}</a></div></div>` : ""}</div>`
       : s.news_headline
-        ? `<div class="news-section"><div class="ns-label">News check</div><div class="art"><span class="art-src">${s.news_source||'News'}</span><div class="art-hl"><a href="${s.news_url}" target="_blank" rel="noopener">${s.news_headline}</a></div></div></div>`
+        ? `<div class="news-section"><div class="ns-label">News check</div><div class="art"><span class="art-src">${s.news_source||'News'}</span>${sourceTierBadge(s.news_source)}<div class="art-hl"><a href="${s.news_url}" target="_blank" rel="noopener">${s.news_headline}</a></div></div></div>`
         : ''
   const related = Array.isArray(s.related_contracts) ? s.related_contracts : []
   const relHtml = related.length>0 ? `
@@ -389,7 +419,8 @@ function renderIntelCard(s) {
         <div class="rel-type">${r.type==='causal'?'Causally linked':r.type==='cross_event'?'Related event':'Same event'}</div>
       </div>`).join('')}
     </div>` : ''
-  return `<div class="card ${cc}">
+  const sparkId = 'spark-' + (s.id || Math.random().toString(36).slice(2))
+  return `<div class="card ${cc}" data-market-id="${s.market_id||''}" data-current-odds="${s.current_odds||0.5}">
     <div class="card-top">
       <div class="sdot"></div>
       <span class="slabel">${stateLabel(s)}</span>
@@ -409,6 +440,7 @@ function renderIntelCard(s) {
         <span class="o-badge ${moveBadgeClass(s)}">${sign}${move}%</span>
         <div class="o-track"><div class="o-fill" style="width:${curr}%;background:${color}"></div></div>
       </div>
+      <div id="${sparkId}"></div>
       ${relHtml}
     </div>
     ${newsHtml}
@@ -538,6 +570,120 @@ function renderSports() {
     : `<div class="empty"><strong>No sports signals</strong><p>No unusual movements detected yet.</p></div>`
 }
 
+// ── SPARKLINE ─────────────────────────────────────────────────────────────
+
+function drawSparkline(points, width=300, height=40, color='var(--accent)') {
+  if (!points || points.length < 2) return ''
+  const vals   = points.map(p => p.odds * 100)
+  const min    = Math.min(...vals)
+  const max    = Math.max(...vals)
+  const range  = max - min || 1
+  const w      = width, h = height, pad = 4
+
+  const coords = vals.map((v, i) => {
+    const x = pad + (i / (vals.length - 1)) * (w - pad * 2)
+    const y = h - pad - ((v - min) / range) * (h - pad * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+
+  const first = vals[0], last = vals[vals.length - 1]
+  const trend = last > first ? 'var(--green)' : last < first ? 'var(--amber)' : 'var(--ink3)'
+
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block;max-width:100%">
+    <polyline points="${coords.join(' ')}" fill="none" stroke="${trend}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${coords[coords.length-1].split(',')[0]}" cy="${coords[coords.length-1].split(',')[1]}" r="2.5" fill="${trend}"/>
+  </svg>`
+}
+
+async function fetchSparkline(marketId) {
+  try {
+    const r = await fetch(`${API}/history/${marketId}?hours=168`)
+    if (!r.ok) return null
+    const d = await r.json()
+    return d.history || null
+  } catch(e) { return null }
+}
+
+async function renderSparklineForCard(marketId, containerId, currentOdds) {
+  const history = await fetchSparkline(marketId)
+  const el = document.getElementById(containerId)
+  if (!el || !history || history.length < 2) return
+
+  const vals   = history.map(p => p.odds * 100)
+  const min    = Math.min(...vals).toFixed(0)
+  const max    = Math.max(...vals).toFixed(0)
+  const first  = vals[0].toFixed(0)
+  const last   = (currentOdds * 100).toFixed(0)
+  const svg    = drawSparkline(history)
+
+  el.innerHTML = `
+    <div class="sparkline-wrap">
+      ${svg}
+      <div class="sparkline-meta">
+        <span class="spark-stat">7d low <strong>${min}%</strong></span>
+        <span class="spark-stat">7d high <strong>${max}%</strong></span>
+        <span class="spark-stat">7d ago <strong>${first}%</strong></span>
+        <span class="spark-stat">now <strong>${last}%</strong></span>
+      </div>
+    </div>`
+}
+
+function sourceTierBadge(source) {
+  if (!source) return ''
+  const s = source.toLowerCase()
+  const t1 = ['reuters','associated press','ap news','bloomberg','financial times','wall street journal','wsj','bbc']
+  const t2 = ['cnbc','marketwatch','guardian','new york times','washington post','politico','axios','espn']
+  if (t1.some(x => s.includes(x))) return `<span class="source-tier tier-1">Tier 1</span>`
+  if (t2.some(x => s.includes(x))) return `<span class="source-tier tier-2">Tier 2</span>`
+  return `<span class="source-tier tier-3">Tier 3</span>`
+}
+
+// ── HISTORY ───────────────────────────────────────────────────────────────
+
+let historyFilter = 'all', historyOffset = 0, historySignals = []
+
+function setHistoryFilter(cat, el) {
+  historyFilter = cat
+  historyOffset = 0
+  historySignals = []
+  document.querySelectorAll('#history-filters .sf').forEach(b=>b.classList.remove('on'))
+  el.classList.add('on')
+  loadHistory()
+}
+
+async function loadHistory(append=false) {
+  const el = document.getElementById('history-feed')
+  if (!append) el.innerHTML = '<div class="loading">Loading history…</div>'
+
+  try {
+    const cat = historyFilter === 'all' ? '' : `&category=${historyFilter}`
+    const d   = await fetchR(`${API}/signals/history?limit=50&offset=${historyOffset}&min_score=60${cat}`)
+    const sigs = d.signals || []
+
+    if (!append) historySignals = sigs
+    else historySignals = [...historySignals, ...sigs]
+
+    historyOffset += sigs.length
+
+    const moreBtn = document.getElementById('history-load-more')
+    moreBtn.style.display = sigs.length === 50 ? 'block' : 'none'
+
+    if (historySignals.length === 0) {
+      el.innerHTML = '<div class="empty"><strong>No history yet</strong><p>Signals accumulate over 30 days. Check back soon.</p></div>'
+      return
+    }
+
+    el.innerHTML = historySignals.map(renderIntelCard).join('')
+  } catch(e) {
+    document.getElementById('history-feed').innerHTML =
+      '<div class="empty"><strong>Could not load history</strong><p>Check Railway is running.</p></div>'
+  }
+}
+
+function loadMoreHistory() {
+  loadHistory(true)
+}
+
 async function loadStats() {
   try {
     const d=await fetchR(`${API}/stats`)
@@ -546,6 +692,20 @@ async function loadStats() {
     document.getElementById('stat-today').textContent   = d.today??0
     document.getElementById('stat-high').textContent    = d.high_confidence??0
   } catch(e) {}
+}
+
+function lazyLoadSparklines() {
+  // Find all sparkline containers and load data for each
+  document.querySelectorAll('[id^="spark-"]').forEach(el => {
+    if (el.dataset.loaded) return
+    el.dataset.loaded = '1'
+    // Extract market_id from the signal — stored as data attr on card
+    const card = el.closest('[data-market-id]')
+    if (!card) return
+    const mid   = card.dataset.marketId
+    const odds  = parseFloat(card.dataset.currentOdds || '0.5')
+    renderSparklineForCard(mid, el.id, odds)
+  })
 }
 
 async function loadFeed() {
@@ -557,6 +717,7 @@ async function loadFeed() {
       document.getElementById('live-label').textContent='Updated '+timeAgo(allSignals[0].detected_at)
     renderIntel()
     renderSports()
+    setTimeout(lazyLoadSparklines, 100)
   } catch(e) {
     const b=document.getElementById('error-box')
     b.style.display='block'

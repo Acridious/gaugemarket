@@ -4,6 +4,67 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
+import os as _os
+
+BRAVE_API_KEY = _os.environ.get('BRAVE_API_KEY', '')
+BRAVE_NEWS_URL = 'https://api.search.brave.com/res/v1/news/search'
+
+# ---------------------------------------------------------------------------
+# Brave Search News API
+# ---------------------------------------------------------------------------
+
+def _brave_search_news(query, freshness='pw', count=5):
+    """
+    Search for news articles using Brave Search API.
+
+    freshness: 'pd' = past day, 'pw' = past week, 'pm' = past month
+    Returns list of article dicts compatible with RSS article format.
+    Falls back to empty list if API key not set or request fails.
+    """
+    if not BRAVE_API_KEY:
+        return []
+    try:
+        response = requests.get(
+            BRAVE_NEWS_URL,
+            headers={
+                'Accept': 'application/json',
+                'Accept-Encoding': 'gzip',
+                'X-Subscription-Token': BRAVE_API_KEY,
+            },
+            params={
+                'q':         query,
+                'count':     count,
+                'freshness': freshness,
+                'text_decorations': False,
+            },
+            timeout=8,
+        )
+        response.raise_for_status()
+        data     = response.json()
+        results  = data.get('results', [])
+        articles = []
+        for r in results:
+            articles.append({
+                'title':       r.get('title', ''),
+                'link':        r.get('url', ''),
+                'description': r.get('description', ''),
+                'pubDate':     r.get('age', ''),   # Brave returns relative age
+                'source':      r.get('source', {}).get('name', 'Brave News'),
+                '_brave':      True,
+            })
+        return articles
+    except Exception as e:
+        print(f"  Brave news error: {e}")
+        return []
+
+
+def _brave_freshness_for_age(max_age_days):
+    """Map max age days to Brave freshness parameter."""
+    if max_age_days <= 1:  return 'pd'
+    if max_age_days <= 7:  return 'pw'
+    return 'pm'
+
+
 # Free RSS feeds by category
 # Priority order matters — first match stops further searching
 CATEGORY_FEEDS = {
@@ -475,6 +536,20 @@ def is_article_relevant(article_headline, event_title, question, article_descrip
         print(f"  Groq: irrelevant — {article_headline[:50]}")
     return result
 
+def _score_article(article, detected_at):
+    """
+    Score an article by credibility and timing for surface ranking.
+    Higher = better. Used to pick the best article when multiple found.
+    """
+    from constants import news_source_weight
+    weight  = news_source_weight(article.get('source', ''))
+    timing  = article.get('timing', 'unknown')
+    # After = capital moved first = most interesting
+    t_score = {'after': 1.0, 'simultaneous': 0.6,
+               'before': 0.3, 'unknown': 0.2}.get(timing, 0.2)
+    return weight * t_score
+
+
 def check_news_vacuum(event_title, question, category='other',
                       signal_detected_at=None):
     search_terms = extract_search_terms(event_title, question)
@@ -484,73 +559,85 @@ def check_news_vacuum(event_title, question, category='other',
             'vacuum': True,
             'articles': [],
             'timing': 'unknown',
-            'checked_at': datetime.now().isoformat()
+            'checked_at': datetime.utcnow().isoformat()
         }
 
-    feeds_to_check = CATEGORY_FEEDS.get(category, CATEGORY_FEEDS['other'])
-
-    if category == 'sports':
-        extra = get_sport_specific_feeds(event_title, question)
-        feeds_to_check = extra + [f for f in feeds_to_check if f not in extra]
-
+    detected_at = signal_detected_at or datetime.utcnow().isoformat()
     articles_found = []
     sources_checked = []
-    detected_at = signal_detected_at or datetime.now().isoformat()
 
-    for feed_url, source_name in feeds_to_check:
-        if source_name in sources_checked:
-            continue
-        sources_checked.append(source_name)
-
-        entries = fetch_rss(feed_url, source_name)
-        for entry in entries[:25]:
-            title = entry.get('title', '').lower()
-            desc = entry.get('description', '').lower()
-            combined = title + ' ' + desc
-
-            # Require the PRIMARY search term (first one) to match
-            # AND at least one secondary term — reduces false matches
-            primary = search_terms[0] if search_terms else ''
-            secondary = search_terms[1:] if len(search_terms) > 1 else []
-
-            primary_matches = primary and primary in combined
-            secondary_matches = not secondary or any(
-                t in combined for t in secondary
-            )
-
-            # For single search term — must appear in title (not just description)
-            if not secondary:
-                if primary not in title:
-                    continue
-            elif not (primary_matches and secondary_matches):
-                continue
-
-            headline = entry.get('title', '')
+    # ── Pass 1: Brave Search API (primary, keyword search across thousands of sources)
+    if BRAVE_API_KEY and search_terms:
+        query   = ' '.join(search_terms[:3])
+        entries = _brave_search_news(query, freshness='pd', count=8)
+        for entry in entries:
+            headline    = entry.get('title', '')
             description = entry.get('description', '')
-
-            # Final gate — ask Groq with headline + description context
-            # Description gives Groq enough to disambiguate e.g.
-            # "atmosphere" meaning weather vs political mood
-            if not is_article_relevant(headline, event_title, question, description):
-                print(f"  Groq rejected: {headline[:60]}")
+            if not headline:
                 continue
-
-            pub_date_str = entry.get('pubDate', '')
-            pub_date = parse_article_date(pub_date_str)
-            timing = classify_article_timing(pub_date, detected_at)
-
+            if not is_article_relevant(headline, event_title, question, description):
+                continue
+            pub_date = parse_article_date(entry.get('pubDate', ''))
+            timing   = classify_article_timing(pub_date, detected_at)
             articles_found.append({
                 'headline': headline,
-                'source': source_name,
-                'url': entry.get('link', ''),
-                'published': pub_date_str,
-                'timing': timing
+                'source':   entry.get('source', 'Brave News'),
+                'url':      entry.get('link', ''),
+                'published': entry.get('pubDate', ''),
+                'timing':   timing,
             })
 
-        if articles_found:
-            break
+    # ── Pass 2: RSS feeds (fallback if Brave found nothing or no API key)
+    if not articles_found:
+        feeds_to_check = CATEGORY_FEEDS.get(category, CATEGORY_FEEDS['other'])
+        if category == 'sports':
+            extra = get_sport_specific_feeds(event_title, question)
+            feeds_to_check = extra + [f for f in feeds_to_check if f not in extra]
 
-    articles_found = articles_found[:3]
+        for feed_url, source_name in feeds_to_check:
+            if source_name in sources_checked:
+                continue
+            sources_checked.append(source_name)
+
+            entries = fetch_rss(feed_url, source_name)
+            for entry in entries[:25]:
+                title    = entry.get('title', '').lower()
+                desc     = entry.get('description', '').lower()
+                combined = title + ' ' + desc
+
+                primary   = search_terms[0] if search_terms else ''
+                secondary = search_terms[1:] if len(search_terms) > 1 else []
+
+                primary_matches   = primary and primary in combined
+                secondary_matches = not secondary or any(t in combined for t in secondary)
+
+                if not secondary:
+                    if primary not in title:
+                        continue
+                elif not (primary_matches and secondary_matches):
+                    continue
+
+                headline    = entry.get('title', '')
+                description = entry.get('description', '')
+
+                if not is_article_relevant(headline, event_title, question, description):
+                    print(f"  Groq rejected: {headline[:60]}")
+                    continue
+
+                pub_date_str = entry.get('pubDate', '')
+                pub_date     = parse_article_date(pub_date_str)
+                timing       = classify_article_timing(pub_date, detected_at)
+
+                articles_found.append({
+                    'headline': headline,
+                    'source':   source_name,
+                    'url':      entry.get('link', ''),
+                    'published': pub_date_str,
+                    'timing':   timing,
+                })
+
+            if articles_found:
+                break
 
     # Determine overall timing of best article found
     overall_timing = 'unknown'
@@ -563,12 +650,15 @@ def check_news_vacuum(event_title, question, category='other',
         elif 'before' in timings:
             overall_timing = 'before'
 
+    # Sort by credibility score — best article surfaces first
+    articles_found.sort(key=lambda a: _score_article(a, detected_at), reverse=True)
+    articles_found = articles_found[:3]
+
     # Background news fallback for non-sports categories.
-    # If nothing found in real-time, try a broader 4-day search.
-    # Marked as 'background' so AI summary frames it as context not explanation.
     sports_cats = {'sports', 'esports'}
     background_article = None
     if not articles_found and category not in sports_cats:
+        feeds_to_check = CATEGORY_FEEDS.get(category, CATEGORY_FEEDS['other'])
         background_article = _find_background_news(
             search_terms, feeds_to_check, max_age_days=4
         )

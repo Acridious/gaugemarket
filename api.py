@@ -5,7 +5,8 @@ from fastapi.responses import JSONResponse, FileResponse
 from database import (
     get_signals_filtered, get_signal_by_id,
     get_signal_stats, get_recent_signals,
-    get_volume_stats,
+    get_volume_stats, get_price_history,
+    get_signals_historical,
 )
 from constants import ALL_CATEGORIES, SAME_EVENT_CATEGORIES
 from datetime import datetime
@@ -264,6 +265,61 @@ def get_stats():
         "platforms":              ["Polymarket"],
         "timestamp":              datetime.utcnow().isoformat(),
     }
+
+
+@app.get("/history/{market_id}")
+def get_market_history(market_id: str, hours: int = Query(default=168, le=168)):
+    """Price history for a market — used for sparklines. Up to 7 days."""
+    history = get_price_history(market_id, hours=hours)
+    return {
+        "market_id": market_id,
+        "history":   history,
+        "count":     len(history),
+    }
+
+
+@app.get("/signals/history")
+def get_signal_history(
+    limit:    int = Query(default=50, le=200),
+    offset:   int = Query(default=0),
+    category: str = Query(default=None),
+    days_back: int = Query(default=30, le=30),
+    min_score: int = Query(default=60),
+):
+    """Historical signal feed for the History tab. Up to 30 days."""
+    signals = get_signals_historical(
+        min_score=min_score,
+        category=category,
+        days_back=days_back,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "signals":   [enrich_signal(s) for s in signals],
+        "count":     len(signals),
+        "days_back": days_back,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+@app.get("/usage")
+def get_usage():
+    """Real-time Groq budget usage for the current day and last poll cycle."""
+    try:
+        from groq_client import _daily_total, DAILY_CAP, _usage, BUDGET, budget_summary
+        return {
+            "groq": {
+                "daily_used":  _daily_total,
+                "daily_cap":   DAILY_CAP,
+                "daily_pct":   round(_daily_total / DAILY_CAP * 100, 1),
+                "last_poll":   {k: {"used": _usage[k], "limit": BUDGET[k]}
+                                for k in BUDGET},
+                "summary":     budget_summary(),
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.get("/health")

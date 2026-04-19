@@ -195,7 +195,47 @@ def setup_db():
 
 def save_snapshot(market_id, event_id, event_title,
                   question, odds, volume, platform):
+    """
+    Save a price snapshot with tiered storage density:
+    - Last 2 hours:  every poll (high frequency for signal detection)
+    - 2 hours - 7 days: one snapshot per hour per market (for sparklines)
+
+    This keeps Postgres lean — without thinning, 7-day retention at full
+    poll frequency would generate ~250k rows. With hourly thinning beyond
+    2h the same period generates ~84k rows.
+    """
+    now = datetime.utcnow()
+    two_hours_ago = (now - timedelta(hours=2)).isoformat()
+    one_hour_ago  = (now - timedelta(hours=1)).isoformat()
+
     with db() as conn:
+        # For data older than 2h, only insert if no snapshot in last hour
+        recent = conn.run('''
+            SELECT COUNT(*) FROM snapshots
+            WHERE market_id = :market_id
+              AND timestamp > :one_hour_ago
+        ''', market_id=market_id, one_hour_ago=one_hour_ago)
+
+        is_recent_data = True  # within last 2h — always insert
+        # Check if this market already has a snapshot in the last 5 mins
+        # (normal dedup, unchanged from before)
+        very_recent = conn.run('''
+            SELECT COUNT(*) FROM snapshots
+            WHERE market_id = :market_id
+              AND timestamp > :cutoff
+        ''', market_id=market_id,
+             cutoff=(now - timedelta(minutes=5)).isoformat())
+
+        if very_recent[0][0] > 0:
+            # Already have a snapshot in last 5 mins — skip unless odds changed
+            last = conn.run('''
+                SELECT odds FROM snapshots
+                WHERE market_id = :market_id
+                ORDER BY timestamp DESC LIMIT 1
+            ''', market_id=market_id)
+            if last and abs(last[0][0] - odds) < 0.001:
+                return  # no meaningful change
+
         conn.run('''
             INSERT INTO snapshots
             (market_id, event_id, event_title, question,
@@ -206,7 +246,7 @@ def save_snapshot(market_id, event_id, event_title,
             market_id=market_id, event_id=event_id,
             event_title=event_title, question=question,
             odds=odds, volume=volume, platform=platform,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=now.isoformat(),
         )
 
 
@@ -313,6 +353,53 @@ def get_signal_by_id(signal_id):
 
 def get_recent_signals(limit=20):
     return get_signals_filtered(min_score=0, limit=limit)
+
+
+def get_price_history(market_id, hours=168):
+    """
+    Return price snapshots for a market over the last N hours (default 7 days).
+    Used to draw sparklines and show price context on signal cards.
+    """
+    from datetime import timedelta
+    cutoff = (datetime.utcnow() - timedelta(hours=hours)).isoformat()
+    with db() as conn:
+        rows = conn.run('''
+            SELECT odds, volume, timestamp
+            FROM snapshots
+            WHERE market_id = :market_id
+              AND timestamp > :cutoff
+            ORDER BY timestamp ASC
+        ''', market_id=market_id, cutoff=cutoff)
+    return [
+        {'odds': r[0], 'volume': r[1], 'timestamp': r[2]}
+        for r in rows
+    ]
+
+
+def get_signals_historical(min_score=50, category=None, platform=None,
+                           days_back=30, limit=100, offset=0):
+    """
+    Return signals from the historical record with pagination.
+    Used by the History tab in the frontend.
+    """
+    from datetime import timedelta
+    cutoff = (datetime.utcnow() - timedelta(days=days_back)).isoformat()
+    with db() as conn:
+        query = ("SELECT * FROM signals WHERE score >= :min_score "
+                 "AND detected_at >= :cutoff")
+        params = {'min_score': min_score, 'cutoff': cutoff}
+        if category and category != 'all':
+            query += " AND category = :category"
+            params['category'] = category
+        if platform:
+            query += " AND platform = :platform"
+            params['platform'] = platform
+        query += " ORDER BY detected_at DESC LIMIT :limit OFFSET :offset"
+        params['limit']  = limit
+        params['offset'] = offset
+        rows = conn.run(query, **params)
+        columns = [c['name'] for c in conn.columns]
+    return [dict(zip(columns, row)) for row in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -550,22 +637,24 @@ def update_signal_news(signal_id, news_result):
 
 def cleanup_old_data():
     """
-    Lean storage — keep DB tiny while there are no paying customers.
+    Retention policy — balances DB size against historical value.
 
-    Signals:    keep last 48 hours
-    Snapshots:  keep last 2 hours (all we need for movement detection)
-    Candidates: keep last 48 hours
-    Volume:     keep last 24 hours
+    Snapshots:  7 days  — needed for sparklines and price history
+    Signals:    30 days — builds the historical record (Bloomberg-esque)
+    Candidates: 7 days
+    Volume:     7 days
 
     Timestamps stored as TEXT ISO format — string comparison is correct
     because ISO-8601 sorts lexicographically.
     """
+    from constants import (SNAPSHOT_RETENTION_DAYS, SIGNAL_RETENTION_DAYS,
+                           CANDIDATE_RETENTION_DAYS, VOLUME_RETENTION_DAYS)
     now = datetime.utcnow()
     cutoffs = {
-        'snapshots':   (now - timedelta(hours=2)).isoformat(),
-        'signals':     (now - timedelta(hours=48)).isoformat(),
-        'candidates':  (now - timedelta(hours=48)).isoformat(),
-        'volume':      (now - timedelta(hours=24)).isoformat(),
+        'snapshots':  (now - timedelta(days=SNAPSHOT_RETENTION_DAYS)).isoformat(),
+        'signals':    (now - timedelta(days=SIGNAL_RETENTION_DAYS)).isoformat(),
+        'candidates': (now - timedelta(days=CANDIDATE_RETENTION_DAYS)).isoformat(),
+        'volume':     (now - timedelta(days=VOLUME_RETENTION_DAYS)).isoformat(),
     }
 
     with db() as conn:

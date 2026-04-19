@@ -47,3 +47,42 @@ SPORTS_MIN_SIGNAL_MINS = 2
 # A 5% move in 30 mins on a geopolitical contract is more meaningful than
 # a 5% move on a binary sports outcome where any small score changes it.
 GEOPOLITICAL_MOVE_BONUS = 5   # extra score points for geo signals
+
+# ---------------------------------------------------------------------------
+# Storage retention (days)
+# ---------------------------------------------------------------------------
+SNAPSHOT_RETENTION_DAYS = 7    # was 2 hours — needed for sparklines
+SIGNAL_RETENTION_DAYS   = 30   # was 48 hours — builds historical record
+CANDIDATE_RETENTION_DAYS = 7
+VOLUME_RETENTION_DAYS   = 7
+
+# ---------------------------------------------------------------------------
+# News source credibility tiers
+# ---------------------------------------------------------------------------
+# Tier 1: primary wire services and financial press — highest weight
+NEWS_TIER_1 = {
+    'reuters', 'associated press', 'ap news', 'bloomberg', 'financial times',
+    'ft', 'wall street journal', 'wsj', 'bbc news', 'bbc world',
+}
+# Tier 2: major broadcast and financial media
+NEWS_TIER_2 = {
+    'cnbc', 'marketwatch', 'guardian', 'the guardian', 'nyt', 'new york times',
+    'washington post', 'economist', 'politico', 'axios', 'espn', 'sky news',
+    'al jazeera', 'france 24',
+}
+# Tier 3: everything else (still valid, lower weight)
+# Any source not in Tier 1 or 2 is implicitly Tier 3
+
+def news_source_tier(source_name):
+    """Return 1, 2, or 3 for a given source name."""
+    s = (source_name or '').lower()
+    if any(t in s for t in NEWS_TIER_1):
+        return 1
+    if any(t in s for t in NEWS_TIER_2):
+        return 2
+    return 3
+
+def news_source_weight(source_name):
+    """Return a weight multiplier for scoring: 1.0, 0.7, or 0.4."""
+    tier = news_source_tier(source_name)
+    return {1: 1.0, 2: 0.7, 3: 0.4}.get(tier, 0.4)
