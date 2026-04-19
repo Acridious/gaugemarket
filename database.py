@@ -205,6 +205,26 @@ def setup_db():
         )
     ''')
 
+    # Safe migrations — add columns that may not exist in older deployments
+    migrations = [
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS news_articles_json TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_headline TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_source TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_url TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS sports_context TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS ai_summary TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS is_terminal INTEGER DEFAULT 0",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS event_id TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_contracts TEXT",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_same_event INTEGER DEFAULT 0",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_cross_event INTEGER DEFAULT 0",
+    ]
+    for m in migrations:
+        try:
+            conn.run(m)
+        except Exception:
+            pass
+
     print("Database ready")
 
 
