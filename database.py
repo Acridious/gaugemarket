@@ -197,10 +197,48 @@ def setup_db():
             "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_contracts TEXT",
             "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_same_event INTEGER DEFAULT 0",
             "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_cross_event INTEGER DEFAULT 0",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS market_id TEXT",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS current_odds_live REAL",
+            "ALTER TABLE signals ADD COLUMN IF NOT EXISTS odds_refreshed_at TEXT",
         ]:
             conn.run(m)
 
     print("Database ready")
+
+
+# ---------------------------------------------------------------------------
+# Live odds refresh
+# ---------------------------------------------------------------------------
+
+def refresh_signal_odds(market_id, current_odds):
+    """
+    Update the live odds on any recent signal for this market.
+    Called every poll for markets that have active signals.
+    Stores the refreshed odds without creating a new signal.
+    """
+    with db() as conn:
+        conn.run(
+            '''UPDATE signals
+               SET current_odds_live = :odds,
+                   odds_refreshed_at = :now
+               WHERE market_id = :market_id
+               AND detected_at >= :cutoff''',
+            odds=current_odds,
+            now=datetime.utcnow().isoformat(),
+            market_id=market_id,
+            cutoff=(datetime.utcnow() - timedelta(hours=6)).isoformat(),
+        )
+
+
+def get_markets_with_active_signals():
+    """Return market_ids that have signals in the last 6 hours."""
+    with db() as conn:
+        rows = conn.run(
+            '''SELECT DISTINCT market_id FROM signals
+               WHERE detected_at >= :cutoff''',
+            cutoff=(datetime.utcnow() - timedelta(hours=6)).isoformat(),
+        )
+        return [r[0] for r in rows] if rows else []
 
 
 # ---------------------------------------------------------------------------

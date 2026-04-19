@@ -138,6 +138,7 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .art-hl{font-size:13px;font-weight:500;color:var(--ink);line-height:1.5;}
 .art-hl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
 .art-list{display:flex;flex-direction:column;gap:8px;}
+.live-odds{font-size:11px;color:var(--ink3);margin-left:8px;font-family:'JetBrains Mono',monospace;}
 .art-timing{font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;margin-left:6px;font-family:'JetBrains Mono',monospace;vertical-align:middle;}
 .timing-after{background:var(--green-light);color:var(--green);}
 .timing-before{background:var(--off);color:var(--ink3);}
@@ -426,6 +427,7 @@ function renderIntelCard(s) {
   const color = moveColor(s)
   const isUp  = s.direction==='YES'
   const move  = pct(s.price_move), curr=pct(s.current_odds), prev=pct(s.prev_odds)
+  const live  = s.current_odds_live != null ? pct(s.current_odds_live) : null
   const sign  = isUp ? '+' : '−'
   const cc    = cardClass(s)
       const articles = Array.isArray(s.news_articles) && s.news_articles.length > 0

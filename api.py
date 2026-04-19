@@ -138,6 +138,11 @@ def _enrich_signal(s):
     s['background_source']   = s.get('background_source') or None
     s['background_url']      = s.get('background_url') or None
 
+    # Live odds — current price vs detection price
+    # If refreshed, show the live price alongside the original move
+    s['current_odds_live']  = s.get('current_odds_live')  # None if not refreshed yet
+    s['odds_refreshed_at']  = s.get('odds_refreshed_at')
+
     # Build news_articles array from stored fields for frontend list rendering
     # Currently we store up to 3 articles in news_articles_json (if present)
     # or fall back to the single news_headline/source/url fields
