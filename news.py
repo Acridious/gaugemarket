@@ -115,8 +115,10 @@ CATEGORY_FEEDS = {
         ('https://feeds.bbci.co.uk/sport/rss.xml', 'BBC Sport'),
     ],
     'esports': [
-        ('https://sports.yahoo.com/rss/', 'Yahoo Sports'),
-        ('https://www.espn.com/espn/rss/news', 'ESPN'),
+        ('https://www.dexerto.com/feed/', 'Dexerto'),
+        ('https://dotesports.com/feed', 'Dot Esports'),
+        ('https://www.theloadout.com/feeds/latest', 'The Loadout'),
+        ('https://sports.yahoo.com/esports/rss', 'Yahoo Esports'),
     ],
     'other': [
         ('https://news.yahoo.com/rss/', 'Yahoo News'),
@@ -610,14 +612,37 @@ def check_news_vacuum(event_title, question, category='other',
     articles_found = []
     sources_checked = []
 
-    # ── Pass 1: Brave Search API (primary, keyword search across thousands of sources)
+    # ── Pass 1: Brave Search API (primary)
+    # Scope the query by category to avoid cross-domain false matches.
+    # "Aurora" means a Dota 2 team in esports context, a crypto protocol
+    # in crypto context, and a weather phenomenon in general.
+    # Adding the category scope ("aurora esports dota2") ensures Brave
+    # returns results from the right domain.
     if BRAVE_API_KEY and search_terms:
-        query   = ' '.join(search_terms[:3])
-        entries = _brave_search_news(query, freshness='pd', count=8)
+        category_scope = {
+            'esports':     'esports',
+            'sports':      'sports',
+            'crypto':      'crypto',
+            'macro':       'economy fed',
+            'political':   'politics',
+            'geopolitical': 'geopolitics',
+            'commodities': 'commodities oil',
+        }.get(category, '')
+        query_terms = search_terms[:3]
+        if category_scope:
+            query_terms = [category_scope] + query_terms
+        query = ' '.join(query_terms)
+        entries = _brave_search_news(query, freshness='pd', count=5)
         for entry in entries:
             headline    = entry.get('title', '')
             description = entry.get('description', '')
             if not headline:
+                continue
+            # Pre-filter: combined title + description must contain
+            # at least one search term — catches "atmosphere at Wembley"
+            # where the team name is in description but not title
+            combined_lower = (headline + ' ' + description).lower()
+            if not any(t in combined_lower for t in search_terms):
                 continue
             if not is_article_relevant(headline, event_title, question, description):
                 continue

@@ -28,7 +28,7 @@ from database import (
     flag_signal_for_retry, get_retry_queue, clear_retry_queue_entry,
 )
 from inline_grouper import run_inline_grouper
-from groq_client import reset_poll_budget, budget_summary
+from groq_client import reset_poll_budget, budget_summary, budget_remaining
 from news import check_news_vacuum, get_event_category, get_keyword_group, RELATED_KEYWORDS, generate_signal_summary
 from constants import (
     SKIP_WORDS,
