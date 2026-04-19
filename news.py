@@ -760,146 +760,95 @@ def check_news_vacuum(event_title, question, category='other',
 # AI summary generation
 # ---------------------------------------------------------------------------
 
+
+
+
 def generate_signal_summary(
     event_title, question, prev_odds, current_odds,
     price_move, direction, category,
     news_article=None, news_vacuum=True,
-    sports_context=None
+    sports_context=None, background_article=None,
+    related_contracts=None,
 ):
-    """
-    Generate a 2-3 sentence AI summary of the signal.
-
-    Two completely different prompts depending on whether news was found:
-
-    NEWS FOUND — summarise what happened and connect it to the contract.
-    Example output: "Haaland has been ruled out of Saturday's match with
-    a knee injury sustained in training. This directly explains the sharp
-    drop in City's win probability from 68% to 51%, as he has scored in
-    7 of their last 9 home games."
-
-    NO NEWS (vacuum) — reason about what smart money might know.
-    Example output: "No public news explains this move. A 17-point shift
-    on a geopolitical contract in under 10 minutes typically suggests
-    informed positioning — possible sources include diplomatic back-channels,
-    leaked policy decisions, or early intelligence on a military development."
-    """
-    from groq_client import groq_yes_no, groq_available, GROQ_API_KEY, GROQ_URL, GROQ_MODEL
-    import requests as _requests
-
+    """Generate a 2-3 sentence explanation of why this contract is moving."""
+    from groq_client import groq_complete, groq_available
     if not groq_available():
         return None
 
-    prev_pct    = round(prev_odds * 100)
-    curr_pct    = round(current_odds * 100)
-    move_pct    = round(price_move * 100)
-    dir_word    = 'up' if direction == 'YES' else 'down'
+    prev_pct = round(prev_odds * 100)
+    curr_pct = round(current_odds * 100)
+    move_pct = round(price_move * 100)
+    dir_word = 'up' if direction == 'YES' else 'down'
+
+    cat_ctx = {
+        'geopolitical': "Geopolitical contracts move slowly. Sharp unexplained moves often reflect diplomatic back-channels, early military intelligence, or leaked policy positions.",
+        'macro':        "Macro contracts rarely move sharply without cause. Likely causes: central bank leaks, early access to economic data, or large institutional positioning.",
+        'political':    "Political contracts without news often reflect internal polling, leaked decisions, or campaign intelligence before it reaches the press.",
+        'crypto':       "Crypto markets move on on-chain data, large wallet movements, exchange intelligence, or macro risk flows.",
+        'commodities':  "Commodity contracts move on supply-chain intelligence, OPEC signalling, or geopolitical developments affecting supply routes.",
+        'sports':       "Pre-game sports moves without news may reflect lineup leaks, injury information in team circles, or sharp money from informed bettors.",
+        'esports':      "Esports moves without news may reflect roster changes or scrim results shared within team communities before public announcement.",
+    }.get(category, "Unexplained prediction market moves often reflect private information or early positioning.")
+
+    ctx_parts = []
+    if background_article:
+        bg_hl = background_article.get('headline', '')
+        if bg_hl:
+            ctx_parts.append("BACKGROUND: " + bg_hl + " (" + background_article.get('source', '') + ")")
+    if related_contracts:
+        try:
+            import json as _j
+            rels = _j.loads(related_contracts) if isinstance(related_contracts, str) else related_contracts
+            if rels:
+                ctx_parts.append("RELATED MARKETS MOVING: " + '; '.join(
+                    r['question'][:50] for r in rels[:3]
+                ))
+        except Exception:
+            pass
+    ctx_block = ('\n'.join(ctx_parts) + '\n\n') if ctx_parts else ''
 
     if news_article and not news_vacuum:
-        # ── NEWS FOUND ──────────────────────────────────────────────────
         headline    = news_article.get('headline', '')
-        description = news_article.get('description', '') or ''
+        description = (news_article.get('description', '') or '')[:500]
         source      = news_article.get('source', '')
         timing      = news_article.get('timing', 'unknown')
-
-        timing_note = {
-            'before':        'The article was published before the price move.',
-            'after':         'The article appeared after the price move — capital moved first.',
-            'simultaneous':  'The article and price move appeared at roughly the same time.',
-        }.get(timing, '')
-
+        timing_map  = {
+            'before':       'Article published BEFORE the move - market may be catching up.',
+            'after':        'Article published AFTER the move - capital moved ahead of reporting.',
+            'simultaneous': 'Article and move appeared at roughly the same time.',
+        }
+        timing_note = timing_map.get(timing, '')
         prompt = (
-            "You are a prediction market analyst. Write exactly 2-3 sentences "
-            "connecting this news article to this contract price movement.\n\n"
-            f"CONTRACT: {question}\n"
-            f"EVENT: {event_title}\n"
-            f"CATEGORY: {category}\n"
-            f"PRICE MOVE: {prev_pct}% → {curr_pct}% ({dir_word}, {move_pct} points)\n\n"
-            f"NEWS HEADLINE: {headline}\n"
-            f"NEWS SOURCE: {source}\n"
-            f"ARTICLE CONTEXT: {description[:600]}\n"
-            f"TIMING: {timing_note}\n\n"
-            "STRICT RULES:\n"
-            "1. Only use facts from the article provided — do not add outside information\n"
-            "2. If the article is only loosely related, say so explicitly\n"
-            "3. Do not invent details not present in the headline or context\n"
-            "4. If timing is 'after', state clearly that capital moved before the article\n"
-            "5. If timing is 'before', state the market may be catching up to existing news\n"
-            "6. Do not start with 'I'\n\n"
-            "Write 2-3 sentences following these rules."
+            "You are a prediction market analyst explaining a price movement.\n\n"
+            "CONTRACT: " + question + "\n"
+            "EVENT: " + event_title + "\nCATEGORY: " + category + "\n"
+            "MOVE: " + str(prev_pct) + "% to " + str(curr_pct) + "% (" + dir_word + ", " + str(move_pct) + " points)\n\n"
+            "NEWS:\nHeadline: " + headline + "\nSource: " + source + "\n"
+            "Context: " + description + "\nTiming: " + timing_note + "\n\n"
+            + ctx_block
+            + "Write 2-3 sentences: explain what the news says, connect it to the move, "
+            "note whether capital led or lagged the news. "
+            "Only use facts from the article. Do not start with I."
         )
     else:
-        # ── NEWS VACUUM ─────────────────────────────────────────────────
-        # Category-specific reasoning about what informed money might know
-        category_context = {
-            'geopolitical': (
-                "Geopolitical contracts move slowly by nature. An unexplained move "
-                "of this size often reflects off-channel intelligence: diplomatic "
-                "back-channels, early military intelligence, or leaked policy decisions."
-            ),
-            'macro': (
-                "Macro contracts rarely move sharply without cause. Unexplained moves "
-                "often precede central bank leaks, early access to economic data, "
-                "or positioning ahead of a scheduled announcement."
-            ),
-            'political': (
-                "Political contracts without news often reflect internal polling, "
-                "leaked decisions, or early knowledge of an announcement before "
-                "it reaches the press."
-            ),
-            'crypto': (
-                "Crypto prediction markets can move on on-chain data, large wallet "
-                "movements, or exchange intelligence not yet visible in news feeds."
-            ),
-            'commodities': (
-                "Commodity contracts sometimes move on supply-chain intelligence, "
-                "early OPEC signalling, or weather/logistics data before it is "
-                "publicly reported."
-            ),
-            'sports': (
-                "Pre-game sports contracts without news may reflect lineup leaks, "
-                "injury information shared in team circles, or sharp money from "
-                "bettors with insider knowledge of team preparations."
-            ),
-            'esports': (
-                "Esports contract moves without news may reflect roster information "
-                "or scrim results shared within team communities before public announcement."
-            ),
-        }.get(category, (
-            "Unexplained moves on prediction markets can reflect private information, "
-            "early positioning, or off-channel intelligence not yet visible in news."
-        ))
-
-        sports_note = ''
-        if sports_context == 'large_ingame_move':
-            sports_note = ' Note: this contract is moving during a live event — a goal, red card, or key moment may explain the move even without a news article.'
-        elif sports_context == 'pre_game_move':
-            sports_note = ' This is a pre-game move, suggesting the information may relate to team selection or player availability.'
-
+        sports_note = (
+            ' This is a pre-game move - likely relates to lineup, injuries, or conditions.'
+            if sports_context == 'pre_game_move' else ''
+        )
         prompt = (
-            "You are a prediction market analyst. Write exactly 2-3 sentences "
-            "about this unusual price movement where NO public news was found.\n\n"
-            f"CONTRACT: {question}\n"
-            f"EVENT: {event_title}\n"
-            f"CATEGORY: {category}\n"
-            f"PRICE MOVE: {prev_pct}% → {curr_pct}% ({dir_word}, {move_pct} points)\n\n"
-            f"CONTEXT: {category_context}{sports_note}\n\n"
-            "STRICT RULES — you must follow all of these:\n"
-            "1. Do NOT invent specific events, names, visits, meetings, or decisions\n"
-            "2. Do NOT claim to know WHY capital moved — you don't\n"
-            "3. DO describe the move factually (size, direction, category)\n"
-            "4. DO explain what TYPE of information typically causes this pattern\n"
-            "5. Use hedged language: 'may reflect', 'consistent with', 'could suggest'\n"
-            "6. Do not start with 'I'\n\n"
-            "Example of BAD output: 'possibly triggered by the upcoming visit of a '\n"
-            "high-ranking official' — this is invented speculation presented as fact.\n"
-            "Example of GOOD output: 'A move of this size with no public news is '\n"
-            "consistent with informed positioning — geopolitical contracts typically '\n"
-            "move on off-channel diplomatic signals not yet in the press.'\n\n"
-            "Write 2-3 sentences following these rules."
+            "You are a prediction market analyst explaining an unusual move where no public news was found.\n\n"
+            "CONTRACT: " + question + "\n"
+            "EVENT: " + event_title + "\nCATEGORY: " + category + "\n"
+            "MOVE: " + str(prev_pct) + "% to " + str(curr_pct) + "% (" + dir_word + ", " + str(move_pct) + " points)\n\n"
+            "CATEGORY CONTEXT: " + cat_ctx + sports_note + "\n\n"
+            + ctx_block
+            + "Write 2-3 sentences. State the move and that no public news explains it. "
+            "Then speculate on what this may reflect using the context provided. "
+            "ALWAYS label speculation with: 'This may reflect', 'One possible explanation is', "
+            "'Consistent with', or 'Could suggest'. Never state speculation as fact. Do not start with I."
         )
 
-    from groq_client import groq_complete
-    summary = groq_complete(prompt, max_tokens=150, temperature=0.3)
+    summary = groq_complete(prompt, max_tokens=180, temperature=0.4)
     return summary if summary else None
 
 

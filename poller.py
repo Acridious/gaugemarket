@@ -603,6 +603,8 @@ def detect_signals(all_markets):
         )
         ai_summary = None
         if not _skip_summary:
+            # Pass background article and related contracts so Groq can
+            # speculate more specifically when no direct news is found
             ai_summary = generate_signal_summary(
                 event_title=market['event_title'],
                 question=market['question'],
@@ -614,6 +616,10 @@ def detect_signals(all_markets):
                 news_article=news_article,
                 news_vacuum=news_result['vacuum'],
                 sports_context=sports_label,
+                background_article=news_result.get('background_article'),
+                related_contracts=json.dumps(
+                    _build_related_contracts(same_event[:4], cross_event[:3])
+                ) if same_event or cross_event else None,
             )
 
         signal = {

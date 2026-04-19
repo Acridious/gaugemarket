@@ -357,42 +357,22 @@ function cardClass(s) {
 }
 
 function stateLabel(s) {
-  if (s.state==='terminal')  return 'Match concluded · Market resolved'
-  if (s.is_reversal)         return 'Reversal · Contract moved opposite direction'
-  if (s.category==='geopolitical' && s.state==='no_news')    return 'Geopolitical shift · No public news'
-  if (s.category==='geopolitical' && s.state==='confirmed')  return 'Geopolitical signal · Capital moved before news'
-  if ((s.category==='macro'||s.category==='political') && s.state==='no_news') return 'No news · High priority'
-  if (s.state==='no_news')   return 'Inconsistent · No public news'
-  if (s.state==='confirmed') return 'News broke after position · Capital moved first'
-  if (s.state==='explained') return 'News already existed · May explain the move'
+  if (s.state==='terminal')  return 'Market resolved'
+  if (s.is_reversal)         return 'Reversed · Smart money changed direction'
+  if (s.state==='no_news') {
+    const cat = s.category
+    if (cat==='geopolitical') return 'Moving without news · Possible off-channel signal'
+    if (cat==='macro')        return 'Moving without news · Possible policy or data leak'
+    if (cat==='political')    return 'Moving without news · Possible inside knowledge'
+    if (cat==='crypto')       return 'Moving without news · Possible on-chain signal'
+    if (cat==='sports')       return 'Moving without news · Possible lineup or injury leak'
+    if (cat==='esports')      return 'Moving without news · Possible roster or scrim intel'
+    return 'Moving without news · No public explanation found'
+  }
+  if (s.state==='confirmed') return 'Capital moved before news broke'
+  if (s.state==='explained') return 'News found · Market catching up'
   if (s.state==='uncertain') return 'News found · Timing unclear'
-  return 'Signal detected'
-}
-
-function moveColor(s) {
-  if (s.state==='terminal') return 'var(--slate)'
-  if (s.is_reversal)        return 'var(--red)'
-  if (s.state==='no_news')  return 'var(--purple)'
-  return s.direction==='YES' ? 'var(--green)' : 'var(--amber)'
-}
-
-function moveBadgeClass(s) {
-  if (s.is_reversal)        return 'move-red'
-  if (s.state==='no_news')  return 'move-up'
-  return s.direction==='YES' ? 'move-up' : 'move-down'
-}
-
-function scoreClass(c) {
-  if (c==='extreme') return 'score-extreme'
-  if (c==='high')    return 'score-high'
-  return 'score-medium'
-}
-
-function buildObservation(s) {
-  const prev=pct(s.prev_odds), curr=pct(s.current_odds), move=pct(s.price_move)
-  const rel=(s.related_same_event||0)+(s.related_cross_event||0)
-  if (s.state==='terminal') {
-    return `"${s.platform} contract settled at ${curr}% — market resolved ${curr>=98?'YES':'NO'}. This reflects match conclusion, not a live information signal."`
+  return 'Unusual movement detected'
   }
   if (s.is_reversal) {
     const pd=s.reversal_from==='YES'?'up':'down', nd=s.direction==='YES'?'up':'down'
@@ -472,7 +452,7 @@ function renderIntelCard(s) {
     </div>
     ${newsHtml}
     <div class="obs">
-      <div class="obs-label">${s.ai_summary ? 'What this means' : "Something's going on here"}</div>
+      <div class="obs-label">Why is this moving?</div>
       <div class="obs-text">${s.ai_summary || buildObservation(s)}</div>
     </div>
   </div>`
@@ -540,7 +520,7 @@ function renderSportsCard(s) {
       ${relHtml}
     </div>
     <div class="sport-obs">
-      <div class="sport-obs-label">${s.ai_summary ? 'What this means' : 'Context'}</div>
+      <div class="sport-obs-label">Why is this moving?</div>
       <div class="sport-obs-text">${obs}</div>
     </div>
   </div>`
