@@ -591,11 +591,6 @@ def detect_signals(all_markets):
         # A contract going to 0% or 100% as a match ends is routine, not a signal.
         terminal = is_terminal_sports_odds(current_odds, category)
 
-        # Skip natural expiry decay — contracts drifting to 0/100 as
-        # their resolution date approaches are not information signals
-        if is_expiring_decay(market, current_odds, price_move, direction):
-            continue
-
         # Also skip very early in a sports match — the first 2 minutes of
         # poll data often reflect stale pre-event snapshots catching up.
         if category in SAME_EVENT_CATEGORIES and mins_elapsed < SPORTS_MIN_SIGNAL_MINS:
@@ -630,6 +625,11 @@ def detect_signals(all_markets):
             continue
 
         direction = 'YES' if current_odds > prev_odds else 'NO'
+
+        # Skip natural expiry decay — contracts drifting to 0/100 as
+        # their resolution date approaches are not information signals
+        if is_expiring_decay(market, current_odds, price_move, direction):
+            continue
 
         news_article = (
             news_result['articles'][0] if news_result['articles'] else None
