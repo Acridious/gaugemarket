@@ -284,7 +284,7 @@ def serve_frontend():
         # Replace the placeholder variables with real values
         html = html.replace(
             "window.__GM_API_URL__ || 'https://web-production-bde4.up.railway.app'",
-            f"'{api_url}'" if api_url else "'https://web-production-bde4.up.railway.app'"
+            f"'{api_url}'" if api_url else "'https://web-production-d8329.up.railway.app'"
         )
         html = html.replace(
             "window.__GM_API_KEY__ || ''",
