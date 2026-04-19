@@ -139,6 +139,8 @@ nav{display:flex;justify-content:space-between;align-items:center;padding:0 40px
 .art-hl a{color:var(--ink);text-decoration:underline;text-decoration-color:var(--border2);}
 .art-list{display:flex;flex-direction:column;gap:8px;}
 .live-odds{font-size:11px;color:var(--ink3);margin-left:8px;font-family:'JetBrains Mono',monospace;}
+.section-divider{display:flex;align-items:center;gap:12px;margin:24px 0 16px;color:var(--ink3);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;}
+.section-divider::before,.section-divider::after{content:'';flex:1;height:1px;background:var(--border);}
 .art-timing{font-size:10px;font-weight:600;padding:1px 6px;border-radius:3px;margin-left:6px;font-family:'JetBrains Mono',monospace;vertical-align:middle;}
 .timing-after{background:var(--green-light);color:var(--green);}
 .timing-before{background:var(--off);color:var(--ink3);}
@@ -581,8 +583,49 @@ function setSportsFilter(f, el) {
 
 function renderIntel() {
   const el=document.getElementById('intel-feed')
-  let sigs=allSignals.filter(s=>INTEL_CATS.has(s.category))
+  const now = Date.now()
+
+  // Remove resolved contracts entirely
+  let sigs = allSignals.filter(s => {
+    if (INTEL_CATS.has(s.category) === false) return false
+    if (s.state === 'terminal') return false
+    if (s.is_terminal) return false
+    return true
+  })
+
   if (intelFilter!=='all') sigs=sigs.filter(s=>s.category===intelFilter)
+
+  // Split into active (still moving) and earlier
+  const ACTIVE_THRESHOLD = 4 * 60 * 60 * 1000        // 4 hours in ms
+  const STALE_THRESHOLD  = 24 * 60 * 60 * 1000       // 24 hours — hide entirely
+  const MOVING_THRESHOLD = 3                           // 3% change = still moving
+
+  sigs = sigs.filter(s => {
+    const age = now - new Date(s.detected_at + 'Z').getTime()
+    return age < STALE_THRESHOLD
+  })
+
+  const isStillMoving = s => {
+    if (s.current_odds_live == null) return false
+    const livePct  = Math.round(s.current_odds_live * 100)
+    const currPct  = Math.round(s.current_odds * 100)
+    return Math.abs(livePct - currPct) >= MOVING_THRESHOLD
+  }
+
+  const activeSigs  = sigs.filter(s => {
+    const age = now - new Date(s.detected_at + 'Z').getTime()
+    return age < ACTIVE_THRESHOLD || isStillMoving(s)
+  }).sort((a,b) => {
+    // Still-moving signals float to top within active
+    if (isStillMoving(a) && !isStillMoving(b)) return -1
+    if (!isStillMoving(a) && isStillMoving(b)) return 1
+    return new Date(b.detected_at) - new Date(a.detected_at)
+  })
+
+  const earlierSigs = sigs.filter(s => {
+    const age = now - new Date(s.detected_at + 'Z').getTime()
+    return age >= ACTIVE_THRESHOLD && !isStillMoving(s)
+  })
   sigs.sort((a,b)=>{
     const au=a.state==='no_news'?1:0, bu=b.state==='no_news'?1:0
     return au!==bu ? bu-au : b.score-a.score
@@ -595,7 +638,24 @@ function renderIntel() {
 
 function renderSports() {
   const el=document.getElementById('sports-feed')
-  let sigs=allSignals.filter(s=>SPORTS_CATS.has(s.category))
+  const now = Date.now()
+
+  // Remove resolved contracts entirely
+  let sigs = allSignals.filter(s => {
+    if (!SPORTS_CATS.has(s.category)) return false
+    if (s.state === 'terminal') return false
+    if (s.is_terminal) return false
+    if (s.sports_context === 'match_resolved_yes') return false
+    if (s.sports_context === 'match_resolved_no') return false
+    return true
+  })
+
+  // Hide sports signals older than 3 hours — sports events move fast
+  sigs = sigs.filter(s => {
+    const age = now - new Date(s.detected_at + 'Z').getTime()
+    return age < 3 * 60 * 60 * 1000
+  })
+
   if (sportsFilter==='live')     sigs=sigs.filter(s=>s.sports_context==='large_ingame_move'||s.sports_context==='moderate_ingame_move')
   if (sportsFilter==='pregame')  sigs=sigs.filter(s=>s.sports_context==='pre_game_move')
   if (sportsFilter==='resolved') sigs=sigs.filter(s=>s.is_terminal)
