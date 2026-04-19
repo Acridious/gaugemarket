@@ -20,43 +20,79 @@ GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions'
 # We split the budget explicitly so high-value calls (news, summaries) always
 # get through even when there are many signals to group.
 #
-# Budget per poll cycle:
-#   GROUPER   — cross-event causal linking (nice to have, can be skipped)
-#   NEWS      — article relevance filtering (important, affects signal state)
-#   SUMMARY   — AI summary generation (important, user-facing)
-#   CATEGORY  — category classification fallback (only fires without API tags)
+# ---------------------------------------------------------------------------
+# Groq daily usage tracking
+# ---------------------------------------------------------------------------
+# Free tier: 14,400 req/day on llama-3.1-8b-instant
+# We track calls across all slots to stay well under this limit.
+# Hard daily cap set to 12,000 (83% of limit) — leaves headroom for
+# news re-checks and burst activity on busy matchdays.
+#
+# Per-poll budgets set so worst case (288 polls/day) stays under daily cap:
+#   grouper:  5 × 288 = 1,440/day
+#   news:     10 × 288 = 2,880/day
+#   summary:  8 × 288 = 2,304/day
+#   category: 5 × 288 = 1,440/day
+#   Total:    28 × 288 = 8,064/day — 56% of daily limit, safe headroom
+
+DAILY_CAP = 12_000  # hard stop regardless of per-poll budgets
 
 BUDGET = {
-    'grouper':  10,   # max Groq calls for inline grouper per poll
-    'news':     20,   # max Groq calls for news relevance per poll
-    'summary':  15,   # max Groq calls for AI summaries per poll
-    'category': 10,   # max Groq calls for category classification per poll
+    'grouper':  5,    # cross-event causal linking (nice to have)
+    'news':     10,   # article relevance filtering (important)
+    'summary':  8,    # AI summaries (important, user-facing)
+    'category': 5,    # category classification fallback
 }
 
-_usage = {'grouper': 0, 'news': 0, 'summary': 0, 'category': 0}
+_usage       = {'grouper': 0, 'news': 0, 'summary': 0, 'category': 0}
+_daily_total = 0        # total calls today across all slots
+_daily_reset = None     # date of last reset
+
+
+def _check_daily_reset():
+    """Reset daily counter at UTC midnight."""
+    global _daily_total, _daily_reset
+    from datetime import date
+    today = date.today()
+    if _daily_reset != today:
+        _daily_reset  = today
+        _daily_total  = 0
 
 
 def reset_poll_budget():
-    """Call this at the start of each poll cycle to reset counters."""
+    """Call this at the start of each poll cycle to reset per-poll counters."""
+    _check_daily_reset()
     for k in _usage:
         _usage[k] = 0
 
 
+def daily_cap_reached():
+    """True if we've hit the daily hard cap across all slots."""
+    _check_daily_reset()
+    return _daily_total >= DAILY_CAP
+
+
 def budget_remaining(slot):
-    """Returns True if this slot still has budget left."""
+    """Returns True if this slot still has budget and daily cap not reached."""
+    if daily_cap_reached():
+        return False
     return _usage.get(slot, 0) < BUDGET.get(slot, 0)
 
 
 def _consume(slot):
     """Increment usage for a slot. Returns False if over budget."""
+    global _daily_total
     if not budget_remaining(slot):
         return False
-    _usage[slot] = _usage.get(slot, 0) + 1
+    _usage[slot]  = _usage.get(slot, 0) + 1
+    _daily_total += 1
     return True
 
 
 def budget_summary():
-    return ' | '.join(f"{k}: {_usage[k]}/{BUDGET[k]}" for k in BUDGET)
+    pct = round(_daily_total / DAILY_CAP * 100)
+    per_poll = ' | '.join(f"{k}: {_usage[k]}/{BUDGET[k]}" for k in BUDGET)
+    return f"daily: {_daily_total}/{DAILY_CAP} ({pct}%) | {per_poll}" 
 
 
 def groq_yes_no(prompt, timeout=8, retries=3, slot='news'):
