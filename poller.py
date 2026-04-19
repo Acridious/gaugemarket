@@ -232,6 +232,7 @@ def process_polymarket_events(events):
                     'volume':         volume,
                     'platform':       'Polymarket',
                     'poly_category':  poly_category,  # None if unknown
+                    'end_date':       market.get('endDate') or event.get('endDate'),
                 })
             except Exception:
                 continue
@@ -550,6 +551,11 @@ def detect_signals(all_markets):
         # Reject signals from markets that have already resolved (terminal odds).
         # A contract going to 0% or 100% as a match ends is routine, not a signal.
         terminal = is_terminal_sports_odds(current_odds, category)
+
+        # Skip natural expiry decay — contracts drifting to 0/100 as
+        # their resolution date approaches are not information signals
+        if is_expiring_decay(market, current_odds, price_move, direction):
+            continue
 
         # Also skip very early in a sports match — the first 2 minutes of
         # poll data often reflect stale pre-event snapshots catching up.
