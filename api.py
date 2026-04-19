@@ -107,6 +107,19 @@ def get_signal_state(s):
 
 
 def enrich_signal(s):
+    try:
+        return _enrich_signal(s)
+    except Exception as e:
+        print(f"enrich_signal error: {e} — signal: {s.get('id')}")
+        s['confidence'] = 'low'
+        s['state'] = 'uncertain'
+        s['news_articles'] = []
+        s['related_contracts'] = []
+        s['is_sports'] = False
+        s['ai_summary'] = None
+        return s
+
+def _enrich_signal(s):
     s['confidence'] = (
         'extreme' if s['score'] >= 80
         else 'high' if s['score'] >= 70
@@ -129,14 +142,13 @@ def enrich_signal(s):
     # Currently we store up to 3 articles in news_articles_json (if present)
     # or fall back to the single news_headline/source/url fields
     try:
-        import json as _json
         raw = s.get('news_articles_json')
-        s['news_articles'] = _json.loads(raw) if raw else (
+        s['news_articles'] = json.loads(raw) if raw else (
             [{
-                'headline': s['news_headline'],
-                'source':   s['news_source'],
-                'url':      s['news_url'],
-                'timing':   s.get('news_timing', 'unknown'),
+                'headline': s.get('news_headline',''),
+                'source':   s.get('news_source',''),
+                'url':      s.get('news_url',''),
+                'timing':   s.get('news_timing','unknown'),
             }] if s.get('news_headline') else []
         )
     except Exception:
@@ -325,18 +337,23 @@ async def waitlist_count(request: Request, _=Depends(require_api_key)):
 
 @app.get("/feed")
 def get_feed(category: str = Query(default=None)):
-    signals = get_signals_filtered(
-        min_score=50,
-        category=category,
-        limit=500,
-    )
-    signals = deduplicate_signals(signals)
-    return {
-        "feed":       [enrich_signal(s) for s in signals],
-        "count":      len(signals),
-        "categories": ALL_CATEGORIES,
-        "timestamp":  datetime.utcnow().isoformat(),
-    }
+    try:
+        signals = get_signals_filtered(
+            min_score=50,
+            category=category,
+            limit=500,
+        )
+        signals = deduplicate_signals(signals)
+        return {
+            "feed":       [enrich_signal(s) for s in signals],
+            "count":      len(signals),
+            "categories": ALL_CATEGORIES,
+            "timestamp":  datetime.utcnow().isoformat(),
+        }
+    except Exception as e:
+        print(f"Feed error: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/signals")
