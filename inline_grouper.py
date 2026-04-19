@@ -234,12 +234,18 @@ def run_inline_grouper(signals):
         print("  Inline grouper: no budget remaining — skipping")
         return 0
 
+    # Count skip reasons for debugging
+    skip_reasons = {}
+    pairs_eligible = 0
+
     for i, sig_a in enumerate(signals):
         for sig_b in signals[i + 1:]:
 
             should_ask, reason = _should_ask_groq(sig_a, sig_b)
             if not should_ask:
+                skip_reasons[reason] = skip_reasons.get(reason, 0) + 1
                 continue
+            pairs_eligible += 1
 
             prompt, rel_type = _build_prompt(sig_a, sig_b)
             pairs_sent += 1
@@ -289,8 +295,10 @@ def run_inline_grouper(signals):
             # Brief pause to stay within Groq rate limits
             time.sleep(0.3)
 
+    if skip_reasons:
+        print(f"  Inline grouper skip reasons: {dict(sorted(skip_reasons.items(), key=lambda x:-x[1]))}")
     print(
-        f"  Inline grouper: {pairs_sent}/{pairs_raw} pairs evaluated, "
+        f"  Inline grouper: {pairs_eligible} eligible, {pairs_sent} evaluated, "
         f"{confirmed} links confirmed"
     )
     return confirmed
