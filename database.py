@@ -65,26 +65,22 @@ def get_connection():
 def db():
     """
     Context manager that yields a live connection.
-    On any exception the shared connection is closed so the next call
-    forces a reconnect rather than retrying on a broken socket.
-    Handles AttributeError on NoneType (dead socket) gracefully.
+
+    Uses a fresh connection per call to avoid stale prepared statement
+    errors ('unnamed prepared statement does not exist') that occur when
+    pg8000 reuses a connection after it was reset by the server.
+
+    Fresh connections are slightly more expensive but eliminate the entire
+    class of 'connection reset by peer' / stale socket errors.
     """
-    try:
-        conn = get_connection()
-    except Exception:
-        global _conn
-        _conn = None
-        conn = _open_connection()
-        _conn = conn
+    conn = _open_connection()
     try:
         yield conn
-    except Exception:
+    finally:
         try:
-            _conn.close()
+            conn.close()
         except Exception:
             pass
-        _conn = None
-        raise
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +201,7 @@ def setup_db():
         )
     ''')
 
-    # Safe migrations — add columns that may not exist in older deployments
+    # Safe migrations — IF NOT EXISTS prevents errors on re-deploy
     migrations = [
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS news_articles_json TEXT",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS background_headline TEXT",
@@ -214,16 +210,15 @@ def setup_db():
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS sports_context TEXT",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS ai_summary TEXT",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS is_terminal INTEGER DEFAULT 0",
+        "ALTER TABLE signals ADD COLUMN IF NOT EXISTS mins_elapsed REAL DEFAULT 0",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS event_id TEXT",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_contracts TEXT",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_same_event INTEGER DEFAULT 0",
         "ALTER TABLE signals ADD COLUMN IF NOT EXISTS related_cross_event INTEGER DEFAULT 0",
+        "CREATE TABLE IF NOT EXISTS retry_queue (signal_id INTEGER PRIMARY KEY, needs_news INTEGER DEFAULT 0, needs_summary INTEGER DEFAULT 0, created_at TEXT NOT NULL)",
     ]
     for m in migrations:
-        try:
-            conn.run(m)
-        except Exception:
-            pass
+        conn.run(m)  # IF NOT EXISTS makes these safe to run repeatedly
 
     print("Database ready")
 
