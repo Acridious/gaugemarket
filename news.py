@@ -6,11 +6,36 @@ from email.utils import parsedate_to_datetime
 
 import os as _os
 
-BRAVE_API_KEY = _os.environ.get('BRAVE_API_KEY', '')
+BRAVE_API_KEY  = _os.environ.get('BRAVE_API_KEY', '')
 BRAVE_NEWS_URL = 'https://api.search.brave.com/res/v1/news/search'
 
+# ---------------------------------------------------------------------------
+# Brave monthly call budget
+# ---------------------------------------------------------------------------
+# Free tier: 2,000 calls/month. At ~3 calls per intel signal and
+# ~50 intel signals/day that's 150/day = 4,500/month — over limit.
+# Cap at 50 Brave calls/day (1,500/month) to stay safely under 2,000.
+# Sports/esports in-game signals never call Brave so real usage is lower.
+
+BRAVE_DAILY_CAP  = 50   # calls per day — adjust based on your plan
+_brave_calls_today = 0
+_brave_reset_date  = None
+
+def _brave_budget_remaining():
+    global _brave_calls_today, _brave_reset_date
+    from datetime import date
+    today = date.today()
+    if _brave_reset_date != today:
+        _brave_reset_date   = today
+        _brave_calls_today  = 0
+    return _brave_calls_today < BRAVE_DAILY_CAP
+
+def _brave_consume():
+    global _brave_calls_today
+    _brave_calls_today += 1
+
 if BRAVE_API_KEY:
-    print(f"Brave Search API: configured (key length {len(BRAVE_API_KEY)})")
+    print(f"Brave Search API: configured (key length {len(BRAVE_API_KEY)}, daily cap: {BRAVE_DAILY_CAP})")
 else:
     print("Brave Search API: NOT configured — set BRAVE_API_KEY env var")
 
