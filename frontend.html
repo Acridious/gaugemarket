@@ -373,22 +373,25 @@ function stateLabel(s) {
   if (s.state==='explained') return 'News found · Market catching up'
   if (s.state==='uncertain') return 'News found · Timing unclear'
   return 'Unusual movement detected'
-  }
+}
+
+function buildObservation(s) {
+  const prev=pct(s.prev_odds), curr=pct(s.current_odds), move=pct(s.price_move)
+  const rel=(s.related_same_event||0)+(s.related_cross_event||0)
+  const relNote = rel>0 ? ` across ${rel+1} related contracts` : ''
+  if (s.state==='terminal')
+    return `Market resolved ${curr>=98?'YES':'NO'} at ${curr}%. Not an active information signal.`
   if (s.is_reversal) {
     const pd=s.reversal_from==='YES'?'up':'down', nd=s.direction==='YES'?'up':'down'
-    return `"Contract previously moved ${pd} ${s.reversal_prev_move||move} points, now reversing ${nd} ${move} points. Sharp reversals can indicate informed positioning on both sides — or a correction of an earlier overreaction."`
+    return `Previously moved ${pd} ${s.reversal_prev_move||move}pts, now reversing ${nd} ${move}pts${relNote}. May indicate informed two-way positioning or an overreaction correction.`
   }
-  if (s.category==='geopolitical'&&s.state==='no_news')
-    return `"${move}pt shift on a geopolitical contract with no public news. Geo markets move slowly by nature — this speed is atypical and may reflect off-channel diplomatic or intelligence signals."`
-  if (s.category==='macro'&&s.state==='no_news')
-    return `"Macro contract moved ${prev}% → ${curr}%${rel>0?` across ${rel+1} related markets`:''} with no news. Unexplained macro moves are high-priority — they often precede central bank leaks or economic data."`
   if (s.state==='confirmed')
-    return `"${s.platform} contract moved ${move} points before news confirmation. Capital appeared to price in the information early."`
+    return `Contract moved ${move}pts${relNote} before this article appeared — capital priced in the information ahead of public reporting.`
   if (s.state==='no_news')
-    return `"${s.platform} contract moved from ${prev}% to ${curr}% — a ${move} point shift${rel>0?` across ${rel+1} related contracts`:''} with no public news found."`
+    return `${move}pt move${relNote} with no public news found. This may reflect private information, early positioning, or off-channel intelligence.`
   if (s.state==='explained')
-    return `"News pre-dates this move. The market may be catching up to existing public information."`
-  return `"Signal detected. ${s.platform} contract moved ${move} points from ${prev}% to ${curr}%."`
+    return `News pre-dates this move — the market appears to be catching up to existing public information rather than pricing in something new.`
+  return `Contract moved ${move}pts${relNote} from ${prev}% to ${curr}%.`
 }
 
 function renderIntelCard(s) {
