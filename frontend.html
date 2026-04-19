@@ -457,8 +457,16 @@ function renderIntelCard(s) {
     <div class="related-list">
       ${related.map(r=>`<div class="rel-item">
         <div class="rel-q">"${r.question}"</div>
-        ${r.odds>0?`<div class="rel-odds">${Math.round(r.odds*100)}%</div>`:''}
-        <div class="rel-type">${r.type==='causal'?'Causally linked':r.type==='cross_event'?'Related event':'Same event'}</div>
+        ${(() => {
+          const curr = Math.round(r.odds*100)
+          const prev = r.prev_odds != null ? Math.round(r.prev_odds*100) : null
+          const diff = prev != null ? curr - prev : 0
+          const color = diff > 0 ? 'var(--green)' : diff < 0 ? '#ef4444' : 'var(--ink2)'
+          const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : ''
+          const diffStr = diff !== 0 ? ` <span style="color:${color};font-size:10px">${arrow}${Math.abs(diff)}%</span>` : ''
+          return r.odds>0 ? `<div class="rel-odds" style="color:${color}">${curr}%${diffStr}</div>` : ''
+        })()}
+        <div class="rel-type">${r.type==='causal'?'Causally linked':r.type==='cross_event'?'Related event':'Related contract'}</div>
       </div>`).join('')}
     </div>` : ''
   const sparkId = 'spark-' + (s.id || Math.random().toString(36).slice(2))
@@ -531,8 +539,16 @@ function renderSportsCard(s) {
     <div class="related-list">
       ${related.map(r=>`<div class="rel-item">
         <div class="rel-q">"${r.question}"</div>
-        ${r.odds>0?`<div class="rel-odds">${Math.round(r.odds*100)}%</div>`:''}
-        <div class="rel-type">${r.type==='causal'?'Causally linked':r.type==='cross_event'?'Related event':'Same event'}</div>
+        ${(() => {
+          const curr = Math.round(r.odds*100)
+          const prev = r.prev_odds != null ? Math.round(r.prev_odds*100) : null
+          const diff = prev != null ? curr - prev : 0
+          const color = diff > 0 ? 'var(--green)' : diff < 0 ? '#ef4444' : 'var(--ink2)'
+          const arrow = diff > 0 ? '↑' : diff < 0 ? '↓' : ''
+          const diffStr = diff !== 0 ? ` <span style="color:${color};font-size:10px">${arrow}${Math.abs(diff)}%</span>` : ''
+          return r.odds>0 ? `<div class="rel-odds" style="color:${color}">${curr}%${diffStr}</div>` : ''
+        })()}
+        <div class="rel-type">${r.type==='causal'?'Causally linked':r.type==='cross_event'?'Related event':'Related contract'}</div>
       </div>`).join('')}
     </div>`:''
   return `<div class="sport-card ${s.is_terminal?'terminal':''} ${sportsCardClass(ctx)}">
