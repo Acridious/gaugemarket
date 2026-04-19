@@ -44,8 +44,10 @@ def get_connection():
     """Return the shared connection, reconnecting if necessary."""
     global _conn
     try:
-        # Lightweight ping — if the connection is dead this raises
         if _conn is not None:
+            # Check socket is actually alive before pinging
+            if getattr(_conn, '_sock', None) is None:
+                raise Exception("socket is None")
             _conn.run("SELECT 1")
             return _conn
     except Exception:
@@ -65,12 +67,18 @@ def db():
     Context manager that yields a live connection.
     On any exception the shared connection is closed so the next call
     forces a reconnect rather than retrying on a broken socket.
+    Handles AttributeError on NoneType (dead socket) gracefully.
     """
-    conn = get_connection()
+    try:
+        conn = get_connection()
+    except Exception:
+        global _conn
+        _conn = None
+        conn = _open_connection()
+        _conn = conn
     try:
         yield conn
     except Exception:
-        global _conn
         try:
             _conn.close()
         except Exception:
