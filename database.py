@@ -186,6 +186,16 @@ def setup_db():
             ON cross_event_candidates(validated)
         ''')
 
+    # Retry queue for budget-exhausted signals
+    conn.run('''
+        CREATE TABLE IF NOT EXISTS retry_queue (
+            signal_id     INTEGER PRIMARY KEY,
+            needs_news    INTEGER DEFAULT 0,
+            needs_summary INTEGER DEFAULT 0,
+            created_at    TEXT NOT NULL
+        )
+    ''')
+
     print("Database ready")
 
 
@@ -558,6 +568,71 @@ def get_signal_stats():
 # Cleanup
 # ---------------------------------------------------------------------------
 
+def flag_signal_for_retry(signal_id, needs_news=False, needs_summary=False):
+    """Flag a signal that was skipped due to budget exhaustion for retry next poll."""
+    with db() as conn:
+        # Use a simple approach: store pending retries in a lightweight table
+        conn.run('''
+            INSERT INTO retry_queue (signal_id, needs_news, needs_summary, created_at)
+            VALUES (:signal_id, :needs_news, :needs_summary, :created_at)
+            ON CONFLICT (signal_id) DO UPDATE SET
+                needs_news    = retry_queue.needs_news    OR :needs_news,
+                needs_summary = retry_queue.needs_summary OR :needs_summary
+        ''',
+            signal_id=signal_id,
+            needs_news=1 if needs_news else 0,
+            needs_summary=1 if needs_summary else 0,
+            created_at=datetime.utcnow().isoformat(),
+        )
+
+
+def get_retry_queue(limit=20):
+    """Get signals pending retry, oldest first."""
+    with db() as conn:
+        # Check table exists first
+        try:
+            rows = conn.run('''
+                SELECT r.signal_id, r.needs_news, r.needs_summary,
+                       s.event_title, s.question, s.category,
+                       s.prev_odds, s.current_odds, s.price_move,
+                       s.direction, s.detected_at, s.news_headline,
+                       s.sports_context
+                FROM retry_queue r
+                JOIN signals s ON s.id = r.signal_id
+                ORDER BY r.created_at ASC
+                LIMIT :limit
+            ''', limit=limit)
+            cols = [c['name'] for c in conn.columns]
+            return [dict(zip(cols, row)) for row in rows]
+        except Exception:
+            return []
+
+
+def clear_retry_queue_entry(signal_id):
+    """Remove a signal from the retry queue after successful processing."""
+    with db() as conn:
+        try:
+            conn.run(
+                "DELETE FROM retry_queue WHERE signal_id = :id",
+                id=signal_id,
+            )
+        except Exception:
+            pass
+
+
+def setup_retry_queue():
+    """Create retry_queue table if not exists."""
+    with db() as conn:
+        conn.run('''
+            CREATE TABLE IF NOT EXISTS retry_queue (
+                signal_id    INTEGER PRIMARY KEY,
+                needs_news   INTEGER DEFAULT 0,
+                needs_summary INTEGER DEFAULT 0,
+                created_at   TEXT NOT NULL
+            )
+        ''')
+
+
 def get_signals_for_news_recheck():
     """
     Returns signals that need a news re-check.
@@ -633,6 +708,49 @@ def update_signal_news(signal_id, news_result):
             url=article['url']         if article else None,
             id=signal_id,
         )
+
+
+def setup_waitlist():
+    """Create waitlist table if not exists — called from api startup."""
+    with db() as conn:
+        conn.run('''
+            CREATE TABLE IF NOT EXISTS waitlist (
+                id         SERIAL PRIMARY KEY,
+                email      TEXT NOT NULL UNIQUE,
+                name       TEXT,
+                joined_at  TEXT NOT NULL
+            )
+        ''')
+        conn.run('''
+            CREATE INDEX IF NOT EXISTS idx_waitlist_email
+            ON waitlist(email)
+        ''')
+
+
+def save_waitlist_entry(email, name=''):
+    """Save a waitlist signup. Returns 'ok' or 'duplicate'."""
+    with db() as conn:
+        try:
+            conn.run('''
+                INSERT INTO waitlist (email, name, joined_at)
+                VALUES (:email, :name, :joined_at)
+            ''',
+                email=email,
+                name=name,
+                joined_at=datetime.utcnow().isoformat(),
+            )
+            return 'ok'
+        except Exception as e:
+            if 'unique' in str(e).lower() or 'duplicate' in str(e).lower():
+                return 'duplicate'
+            raise
+
+
+def get_waitlist_count():
+    """Return total waitlist signups."""
+    with db() as conn:
+        rows = conn.run("SELECT COUNT(*) FROM waitlist")
+        return rows[0][0] if rows else 0
 
 
 def cleanup_old_data():

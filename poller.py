@@ -25,6 +25,7 @@ from database import (
     get_signal_stats, cleanup_old_data,
     save_volume_snapshot,
     get_signals_for_news_recheck, update_signal_news,
+    flag_signal_for_retry, get_retry_queue, clear_retry_queue_entry,
 )
 from inline_grouper import run_inline_grouper
 from groq_client import reset_poll_budget, budget_summary
@@ -657,6 +658,19 @@ def detect_signals(all_markets):
         signal['db_id'] = signal_id
         signals.append(signal)
 
+        # Flag for retry if news or summary was skipped due to budget exhaustion
+        _needs_news_retry    = (not _skip_summary and news_result['vacuum']
+                                and not budget_remaining('news')
+                                and category not in ('sports', 'esports'))
+        _needs_summary_retry = (not _skip_summary and ai_summary is None
+                                and not budget_remaining('summary'))
+        if signal_id and (_needs_news_retry or _needs_summary_retry):
+            flag_signal_for_retry(
+                signal_id,
+                needs_news=_needs_news_retry,
+                needs_summary=_needs_summary_retry,
+            )
+
         confidence = (
             'EXTREME' if signal_score >= 80
             else 'HIGH' if signal_score >= 70
@@ -790,6 +804,83 @@ def run_news_recheck():
 
 
 # ---------------------------------------------------------------------------
+# Retry queue processor
+# ---------------------------------------------------------------------------
+
+def run_retry_queue():
+    """
+    Process signals that had news/summary skipped due to budget exhaustion.
+    Runs at the START of each poll cycle — before new signals are processed —
+    so fresh budget is available and older signals get filled in promptly.
+    """
+    from groq_client import budget_remaining
+    pending = get_retry_queue(limit=10)
+    if not pending:
+        return
+
+    print(f"  Retry queue: {len(pending)} signals pending")
+    completed = 0
+
+    for s in pending:
+        signal_id = s['signal_id']
+        news_updated    = False
+        summary_updated = False
+
+        # Retry news check
+        if s['needs_news'] and budget_remaining('news'):
+            news_result = check_news_vacuum(
+                s['event_title'], s['question'],
+                category=s.get('category', 'other'),
+                signal_detected_at=s['detected_at'],
+            )
+            if not news_result.get('vacuum'):
+                update_signal_news(signal_id, news_result)
+                news_updated = True
+                print(f"  Retry news OK: {s['question'][:50]}")
+
+        # Retry summary generation
+        if s['needs_summary'] and budget_remaining('summary'):
+            news_article = None
+            if s.get('news_headline'):
+                news_article = {
+                    'headline':    s['news_headline'],
+                    'description': '',
+                    'source':      '',
+                    'timing':      'unknown',
+                }
+            summary = generate_signal_summary(
+                event_title=s['event_title'],
+                question=s['question'],
+                prev_odds=s['prev_odds'],
+                current_odds=s['current_odds'],
+                price_move=s['price_move'],
+                direction=s['direction'],
+                category=s.get('category', 'other'),
+                news_article=news_article,
+                news_vacuum=(not bool(s.get('news_headline'))),
+                sports_context=s.get('sports_context'),
+            )
+            if summary:
+                from database import db
+                with db() as conn:
+                    conn.run(
+                        "UPDATE signals SET ai_summary = :s WHERE id = :id",
+                        s=summary, id=signal_id,
+                    )
+                summary_updated = True
+                print(f"  Retry summary OK: {s['question'][:50]}")
+
+        # Clear from queue if both needs are satisfied
+        still_needs_news    = s['needs_news']    and not news_updated
+        still_needs_summary = s['needs_summary'] and not summary_updated
+        if not still_needs_news and not still_needs_summary:
+            clear_retry_queue_entry(signal_id)
+            completed += 1
+
+    print(f"  Retry queue: {completed}/{len(pending)} completed")
+
+
+# ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
 
@@ -804,6 +895,7 @@ def run():
         print(f"\n[Poll #{poll_count}] {datetime.utcnow().strftime('%H:%M:%S')} UTC")
 
         reset_poll_budget()  # reset Groq call counters for this cycle
+        run_retry_queue()    # fill in skipped news/summaries from last poll
         poly_events  = fetch_polymarket_events()
         poly_markets = process_polymarket_events(poly_events)
         print(f"Polymarket: {len(poly_markets)} active markets")
