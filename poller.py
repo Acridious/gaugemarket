@@ -826,8 +826,13 @@ def run_retry_queue():
         news_updated    = False
         summary_updated = False
 
+        # Check retry budget first — dedicated slot never touched by main poll
+        if not budget_remaining('retry'):
+            print("  Retry queue: retry budget exhausted, deferring remainder")
+            break
+
         # Retry news check
-        if s['needs_news'] and budget_remaining('news'):
+        if s['needs_news'] and budget_remaining('retry'):
             news_result = check_news_vacuum(
                 s['event_title'], s['question'],
                 category=s.get('category', 'other'),
@@ -839,7 +844,7 @@ def run_retry_queue():
                 print(f"  Retry news OK: {s['question'][:50]}")
 
         # Retry summary generation
-        if s['needs_summary'] and budget_remaining('summary'):
+        if s['needs_summary'] and budget_remaining('retry'):
             news_article = None
             if s.get('news_headline'):
                 news_article = {
@@ -848,6 +853,10 @@ def run_retry_queue():
                     'source':      '',
                     'timing':      'unknown',
                 }
+            # Pass retry slot so it uses dedicated retry budget
+            # not the main summary budget
+            from groq_client import _consume
+            _consume('retry')  # charge the retry slot
             summary = generate_signal_summary(
                 event_title=s['event_title'],
                 question=s['question'],

@@ -39,14 +39,17 @@ DAILY_CAP = 12_000  # hard stop regardless of per-poll budgets
 
 BUDGET = {
     'grouper':  5,    # cross-event causal linking (nice to have)
-    'news':     20,   # article relevance — sports excluded so budget goes to intel
-    'summary':  10,   # AI summaries (important, user-facing)
+    'news':     15,   # article relevance — sports excluded so budget goes to intel
+    'summary':  7,    # AI summaries for current poll signals
     'category': 5,    # category classification fallback
+    'retry':    6,    # reserved exclusively for retry queue — never touched by main poll
+                      # separate slot prevents circular budget exhaustion:
+                      # if poll exhausts 'summary', retry still has its own 6 calls
 }
-# Note: sports signals skip news checking entirely (see news.py)
-# so the 'news' budget is exclusively for geo/macro/political/crypto
+# Note: sports in-game signals skip news/summary entirely (see news.py)
+# so budgets are exclusively for pre-game sports and intelligence categories
 
-_usage       = {'grouper': 0, 'news': 0, 'summary': 0, 'category': 0}
+_usage       = {'grouper': 0, 'news': 0, 'summary': 0, 'category': 0, 'retry': 0}
 _daily_total = 0        # total calls today across all slots
 _daily_reset = None     # date of last reset
 
