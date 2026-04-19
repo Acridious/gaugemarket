@@ -1,5 +1,6 @@
 import json
-from fastapi import FastAPI, Query
+import os
+from fastapi import FastAPI, Query, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from database import (
@@ -17,12 +18,58 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# ---------------------------------------------------------------------------
+# CORS — locked to your frontend domain in production
+# Set ALLOWED_ORIGINS in Railway env vars, comma-separated:
+# e.g. "https://gaugemarket.vercel.app,https://gaugemarket.com"
+# Falls back to localhost only if not set — never open in production
+# ---------------------------------------------------------------------------
+_origins_env = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000')
+ALLOWED_ORIGINS = [o.strip() for o in _origins_env.split(',') if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# API key authentication
+# ---------------------------------------------------------------------------
+# Set API_KEY in Railway env vars — generate with:
+#   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+# Frontend sends it as: X-API-Key: <key>
+# Public endpoints (/, /health, /waitlist) are exempt
+# ---------------------------------------------------------------------------
+API_KEY = os.environ.get('API_KEY', '')
+
+PUBLIC_PATHS = {'/', '/health', '/waitlist', '/docs', '/openapi.json'}
+
+async def require_api_key(request: Request):
+    if not API_KEY:
+        return  # API_KEY not set — open (dev mode)
+    if request.url.path in PUBLIC_PATHS:
+        return  # exempt
+    key = request.headers.get('X-API-Key', '')
+    if key != API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key. "
+                   "Set X-API-Key header with your GaugeMarket API key."
+        )
+
+# Wire key check as middleware so it applies to ALL routes automatically
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    if API_KEY and request.url.path not in PUBLIC_PATHS:
+        key = request.headers.get('X-API-Key', '')
+        if key != API_KEY:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing API key"}
+            )
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +124,23 @@ def enrich_signal(s):
     s['background_headline'] = s.get('background_headline') or None
     s['background_source']   = s.get('background_source') or None
     s['background_url']      = s.get('background_url') or None
+
+    # Build news_articles array from stored fields for frontend list rendering
+    # Currently we store up to 3 articles in news_articles_json (if present)
+    # or fall back to the single news_headline/source/url fields
+    try:
+        import json as _json
+        raw = s.get('news_articles_json')
+        s['news_articles'] = _json.loads(raw) if raw else (
+            [{
+                'headline': s['news_headline'],
+                'source':   s['news_source'],
+                'url':      s['news_url'],
+                'timing':   s.get('news_timing', 'unknown'),
+            }] if s.get('news_headline') else []
+        )
+    except Exception:
+        s['news_articles'] = []
 
     # Category context for the frontend
     s['is_sports'] = s.get('category') in SAME_EVENT_CATEGORIES
@@ -201,9 +265,42 @@ def deduplicate_signals(signals):
 # Routes
 # ---------------------------------------------------------------------------
 
+@app.on_event("startup")
+async def startup():
+    from database import setup_waitlist
+    setup_waitlist()
+
+
 @app.get("/", include_in_schema=False)
 def serve_frontend():
     return FileResponse("frontend.html")
+
+
+@app.post("/waitlist")
+async def join_waitlist(request: Request):
+    """Public endpoint — no API key required. Accepts {email, name?}."""
+    from database import save_waitlist_entry
+    try:
+        body = await request.json()
+        email = (body.get('email') or '').strip().lower()
+        name  = (body.get('name') or '').strip()
+        if not email or '@' not in email:
+            raise HTTPException(status_code=400, detail="Valid email required")
+        result = save_waitlist_entry(email, name)
+        if result == 'duplicate':
+            return {"status": "already_registered", "message": "You're already on the list."}
+        return {"status": "ok", "message": "You're on the list. We'll be in touch."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/waitlist/count")
+async def waitlist_count(request: Request, _=Depends(require_api_key)):
+    """Protected — shows waitlist size to admins."""
+    from database import get_waitlist_count
+    return {"count": get_waitlist_count()}
 
 
 @app.get("/feed")

@@ -635,6 +635,10 @@ def detect_signals(all_markets):
             'news_headline':       news_article['headline'] if news_article else None,
             'news_source':         news_article['source'] if news_article else None,
             'news_url':            news_article['url'] if news_article else None,
+            'news_articles_json':   json.dumps([{
+                'headline': a['headline'], 'source': a['source'],
+                'url': a['url'], 'timing': a.get('timing','unknown'),
+            } for a in news_result.get('articles', [])]) if news_result.get('articles') else None,
             'background_headline': background_article['headline'] if background_article else None,
             'background_source':   background_article['source']   if background_article else None,
             'background_url':      background_article['url']      if background_article else None,
@@ -658,18 +662,13 @@ def detect_signals(all_markets):
         signal['db_id'] = signal_id
         signals.append(signal)
 
-        # Flag for retry if news or summary was skipped due to budget exhaustion
-        _needs_news_retry    = (not _skip_summary and news_result['vacuum']
-                                and not budget_remaining('news')
-                                and category not in ('sports', 'esports'))
+        # Flag for summary retry if budget was exhausted this poll.
+        # News is handled by run_news_recheck() at the 30-min window —
+        # no need to duplicate that in the retry queue.
         _needs_summary_retry = (not _skip_summary and ai_summary is None
                                 and not budget_remaining('summary'))
-        if signal_id and (_needs_news_retry or _needs_summary_retry):
-            flag_signal_for_retry(
-                signal_id,
-                needs_news=_needs_news_retry,
-                needs_summary=_needs_summary_retry,
-            )
+        if signal_id and _needs_summary_retry:
+            flag_signal_for_retry(signal_id, needs_news=False, needs_summary=True)
 
         confidence = (
             'EXTREME' if signal_score >= 80
@@ -826,24 +825,13 @@ def run_retry_queue():
         news_updated    = False
         summary_updated = False
 
-        # Check retry budget first — dedicated slot never touched by main poll
+        # Check retry budget — dedicated slot never touched by main poll
         if not budget_remaining('retry'):
             print("  Retry queue: retry budget exhausted, deferring remainder")
             break
 
-        # Retry news check
-        if s['needs_news'] and budget_remaining('retry'):
-            news_result = check_news_vacuum(
-                s['event_title'], s['question'],
-                category=s.get('category', 'other'),
-                signal_detected_at=s['detected_at'],
-            )
-            if not news_result.get('vacuum'):
-                update_signal_news(signal_id, news_result)
-                news_updated = True
-                print(f"  Retry news OK: {s['question'][:50]}")
-
-        # Retry summary generation
+        # Only summaries are retried here.
+        # News is handled by run_news_recheck() at the 30-min window.
         if s['needs_summary'] and budget_remaining('retry'):
             news_article = None
             if s.get('news_headline'):
@@ -879,10 +867,8 @@ def run_retry_queue():
                 summary_updated = True
                 print(f"  Retry summary OK: {s['question'][:50]}")
 
-        # Clear from queue if both needs are satisfied
-        still_needs_news    = s['needs_news']    and not news_updated
-        still_needs_summary = s['needs_summary'] and not summary_updated
-        if not still_needs_news and not still_needs_summary:
+        # Clear from queue once summary is done
+        if summary_updated or not s['needs_summary']:
             clear_retry_queue_entry(signal_id)
             completed += 1
 

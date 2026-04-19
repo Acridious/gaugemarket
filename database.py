@@ -136,6 +136,7 @@ def setup_db():
             ('is_terminal', 'INTEGER DEFAULT 0'),
             ('mins_elapsed', 'REAL DEFAULT 0'),
             ('ai_summary', 'TEXT'),
+            ('news_articles_json', 'TEXT'),
             ('background_headline', 'TEXT'),
             ('background_source', 'TEXT'),
             ('background_url', 'TEXT'),
@@ -288,7 +289,7 @@ def save_signal(signal_data):
                 news_vacuum, news_headline, news_source, news_url,
                 detected_at, category, related_contracts, news_timing,
                 market_url, ai_summary, is_terminal, mins_elapsed,
-                background_headline, background_source, background_url
+                news_articles_json, background_headline, background_source, background_url
             ) VALUES (
                 :event_id, :event_title, :question, :platform,
                 :prev_odds, :current_odds, :price_move, :direction,
@@ -296,7 +297,7 @@ def save_signal(signal_data):
                 :news_vacuum, :news_headline, :news_source, :news_url,
                 :detected_at, :category, :related_contracts, :news_timing,
                 :market_url, :ai_summary, :is_terminal, :mins_elapsed,
-                :background_headline, :background_source, :background_url
+                :news_articles_json, :background_headline, :background_source, :background_url
             )
             RETURNING id
         ''',
@@ -323,6 +324,7 @@ def save_signal(signal_data):
             market_url=signal_data.get('market_url'),
             ai_summary=signal_data.get('ai_summary'),
             is_terminal=1 if signal_data.get('is_terminal', False) else 0,
+            news_articles_json=signal_data.get('news_articles_json'),
             background_headline=signal_data.get('background_headline'),
             background_source=signal_data.get('background_source'),
             background_url=signal_data.get('background_url'),
@@ -569,7 +571,11 @@ def get_signal_stats():
 # ---------------------------------------------------------------------------
 
 def flag_signal_for_retry(signal_id, needs_news=False, needs_summary=False):
-    """Flag a signal that was skipped due to budget exhaustion for retry next poll."""
+    """
+    Flag a signal for summary retry next poll.
+    needs_news is accepted but ignored — news is handled by run_news_recheck().
+    Only needs_summary=True has effect.
+    """
     with db() as conn:
         # Use a simple approach: store pending retries in a lightweight table
         conn.run('''
