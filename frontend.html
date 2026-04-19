@@ -394,6 +394,34 @@ function buildObservation(s) {
   return `Contract moved ${move}pts${relNote} from ${prev}% to ${curr}%.`
 }
 
+function moveColor(s) {
+  if (s.price_move >= 0.30) return '#7c3aed'
+  if (s.price_move >= 0.20) return '#6d28d9'
+  if (s.price_move >= 0.10) return '#4f46e5'
+  return '#3b82f6'
+}
+function moveBadgeClass(s) {
+  if (s.price_move >= 0.30) return 'badge-extreme'
+  if (s.price_move >= 0.20) return 'badge-high'
+  if (s.price_move >= 0.10) return 'badge-medium'
+  return 'badge-low'
+}
+function scoreClass(score) {
+  if (score >= 80) return 'score-extreme'
+  if (score >= 70) return 'score-high'
+  if (score >= 60) return 'score-medium'
+  return 'score-low'
+}
+function sourceTierBadge(source) {
+  if (!source) return ''
+  const s = source.toLowerCase()
+  const t1 = ['reuters','bloomberg','bbc','ap news','financial times','wsj','wall street']
+  const t2 = ['cnbc','guardian','nyt','new york times','washington post','espn','axios']
+  if (t1.some(t=>s.includes(t))) return '<span class="tier-badge tier-1">Tier 1</span>'
+  if (t2.some(t=>s.includes(t))) return '<span class="tier-badge tier-2">Tier 2</span>'
+  return ''
+}
+
 function renderIntelCard(s) {
   const color = moveColor(s)
   const isUp  = s.direction==='YES'
