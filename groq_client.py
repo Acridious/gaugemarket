@@ -39,10 +39,12 @@ DAILY_CAP = 12_000  # hard stop regardless of per-poll budgets
 
 BUDGET = {
     'grouper':  5,    # cross-event causal linking (nice to have)
-    'news':     10,   # article relevance filtering (important)
-    'summary':  8,    # AI summaries (important, user-facing)
+    'news':     20,   # article relevance — sports excluded so budget goes to intel
+    'summary':  10,   # AI summaries (important, user-facing)
     'category': 5,    # category classification fallback
 }
+# Note: sports signals skip news checking entirely (see news.py)
+# so the 'news' budget is exclusively for geo/macro/political/crypto
 
 _usage       = {'grouper': 0, 'news': 0, 'summary': 0, 'category': 0}
 _daily_total = 0        # total calls today across all slots

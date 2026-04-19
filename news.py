@@ -9,6 +9,11 @@ import os as _os
 BRAVE_API_KEY = _os.environ.get('BRAVE_API_KEY', '')
 BRAVE_NEWS_URL = 'https://api.search.brave.com/res/v1/news/search'
 
+if BRAVE_API_KEY:
+    print(f"Brave Search API: configured (key length {len(BRAVE_API_KEY)})")
+else:
+    print("Brave Search API: NOT configured — set BRAVE_API_KEY env var")
+
 # ---------------------------------------------------------------------------
 # Brave Search News API
 # ---------------------------------------------------------------------------
@@ -552,6 +557,18 @@ def _score_article(article, detected_at):
 
 def check_news_vacuum(event_title, question, category='other',
                       signal_detected_at=None):
+    # Sports/esports contracts never have news articles explaining
+    # in-game moves — skip entirely to preserve Groq news budget
+    # for intelligence categories (geo, macro, political, crypto).
+    if category in ('sports', 'esports'):
+        return {
+            'vacuum': True,
+            'articles': [],
+            'timing': 'unknown',
+            'checked_at': datetime.utcnow().isoformat(),
+            'background_article': None,
+        }
+
     search_terms = extract_search_terms(event_title, question)
 
     if not search_terms:
