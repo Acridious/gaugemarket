@@ -541,6 +541,33 @@ def is_article_relevant(article_headline, event_title, question, article_descrip
         print(f"  Groq: irrelevant — {article_headline[:50]}")
     return result
 
+def _looks_like_ingame(event_title, question):
+    """
+    Returns True if this sports contract is almost certainly an in-game
+    prop that won't have a news article.
+
+    Pre-game contracts (team winner, match result, injury-related props)
+    CAN have news — lineup leaks, injury reports, team news.
+    In-game props (player rebounds O/U 0.5, total kills, first scorer)
+    will never have a relevant news article.
+    """
+    text = f"{event_title} {question}".lower()
+
+    # In-game prop patterns — these resolve during live play
+    ingame_patterns = [
+        'o/u 0.', 'o/u 1.', 'o/u 2.',   # low threshold props = live
+        'rebounds o/u', 'assists o/u', 'points o/u',
+        'kills o/u', 'total kills',
+        'first blood', 'first scorer', 'first goal',
+        'anytime scorer', 'last scorer',
+        'map winner', 'round winner',
+        'odd/even', 'correct score',
+        'both teams to score', 'btts',
+        'next goal', 'next point',
+    ]
+    return any(p in text for p in ingame_patterns)
+
+
 def _score_article(article, detected_at):
     """
     Score an article by credibility and timing for surface ranking.
@@ -557,10 +584,18 @@ def _score_article(article, detected_at):
 
 def check_news_vacuum(event_title, question, category='other',
                       signal_detected_at=None):
-    # Sports/esports contracts never have news articles explaining
-    # in-game moves — skip entirely to preserve Groq news budget
-    # for intelligence categories (geo, macro, political, crypto).
-    if category in ('sports', 'esports'):
+    # For sports/esports, only check news for pre-game moves.
+    # In-game moves (goals, red cards, injuries during play) will never
+    # have a news article — skipping saves the Groq news budget for
+    # signals that can actually have news attached.
+    # sports_context is passed via signal_detected_at's sibling arg —
+    # we detect it from the category + question pattern here instead.
+    _is_ingame = (
+        category in ('sports', 'esports')
+        and signal_detected_at is not None
+        and _looks_like_ingame(event_title, question)
+    )
+    if _is_ingame:
         return {
             'vacuum': True,
             'articles': [],
