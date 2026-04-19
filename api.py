@@ -273,7 +273,27 @@ async def startup():
 
 @app.get("/", include_in_schema=False)
 def serve_frontend():
-    return FileResponse("frontend.html")
+    # Inject API key and URL server-side so they never live in the repo.
+    # The browser gets a fully rendered page with credentials embedded,
+    # but git only sees the placeholder variables.
+    try:
+        with open("frontend.html", "r") as f:
+            html = f.read()
+        api_url = os.environ.get("PUBLIC_API_URL", "")
+        api_key = API_KEY or ""
+        # Replace the placeholder variables with real values
+        html = html.replace(
+            "window.__GM_API_URL__ || 'https://web-production-bde4.up.railway.app'",
+            f"'{api_url}'" if api_url else "'https://web-production-bde4.up.railway.app'"
+        )
+        html = html.replace(
+            "window.__GM_API_KEY__ || ''",
+            f"'{api_key}'"
+        )
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=html)
+    except Exception:
+        return FileResponse("frontend.html")
 
 
 @app.post("/waitlist")
