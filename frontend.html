@@ -626,14 +626,23 @@ function renderIntel() {
     const age = now - new Date(s.detected_at + 'Z').getTime()
     return age >= ACTIVE_THRESHOLD && !isStillMoving(s)
   })
-  sigs.sort((a,b)=>{
-    const au=a.state==='no_news'?1:0, bu=b.state==='no_news'?1:0
-    return au!==bu ? bu-au : b.score-a.score
-  })
-  document.getElementById('tab-count-intel').textContent=sigs.length
-  el.innerHTML=sigs.length
-    ? sigs.map(renderIntelCard).join('')
-    : `<div class="empty"><strong>No signals yet</strong><p>Nothing flagged in this category. The poller runs every 5 minutes.</p></div>`
+  // Update tab count with total visible signals
+  document.getElementById('tab-count-intel').textContent = activeSigs.length + earlierSigs.length
+
+  if (!activeSigs.length && !earlierSigs.length) {
+    el.innerHTML='<div class="empty"><strong>No signals yet</strong><p>Nothing flagged in this category. The poller runs every 5 minutes.</p></div>'
+    return
+  }
+
+  let html = ''
+  if (activeSigs.length) {
+    html += activeSigs.map(renderIntelCard).join('')
+  }
+  if (earlierSigs.length) {
+    html += '<div class="section-divider"><span>Earlier today</span></div>'
+    html += earlierSigs.map(renderIntelCard).join('')
+  }
+  el.innerHTML = html
 }
 
 function renderSports() {
